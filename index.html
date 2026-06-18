@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Echo — your memory, not theirs</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --ink:#15101F;
+    --panel:#211934;
+    --panel-2:#2A2140;
+    --paper:#F3ECE3;
+    --ash:#9C8FB0;
+    --spark:#FF9B5C;
+    --spark-dim:#7A5238;
+    --verify:#6FCBBF;
+    --lumi:#9B7FE8;
+    --nova:#6FCBBF;
+    --radius:18px;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--ink);
+    color:var(--paper);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding:48px 20px 80px;
+    min-height:100vh;
+  }
+
+  .wrap{max-width:560px;margin:0 auto;}
+
+  .wordmark{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    letter-spacing:0.18em;
+    color:var(--ash);
+    margin-bottom:36px;
+  }
+  .wordmark b{color:var(--spark);font-weight:500;}
+
+  h1{
+    font-family:'Fraunces',serif;
+    font-weight:500;
+    font-size:clamp(30px,6vw,42px);
+    line-height:1.12;
+    margin:0 0 16px;
+    letter-spacing:-0.01em;
+  }
+  h1 em{font-style:italic;color:var(--spark);}
+
+  .sub{
+    color:var(--ash);
+    font-size:16px;
+    line-height:1.55;
+    max-width:440px;
+    margin:0 0 40px;
+  }
+
+  /* ---- chat frame ---- */
+  .frame{
+    background:var(--panel);
+    border-radius:var(--radius);
+    padding:18px 18px 20px;
+    border:1px solid rgba(255,255,255,0.06);
+    box-shadow:0 24px 60px -24px rgba(0,0,0,0.5);
+  }
+  .frame-head{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding-bottom:14px;
+    margin-bottom:14px;
+    border-bottom:1px solid rgba(255,255,255,0.07);
+  }
+  .avatar{
+    width:38px;height:38px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Fraunces',serif;font-weight:600;font-size:16px;
+    color:var(--ink);
+    transition:background 0.5s ease;
+    flex-shrink:0;
+  }
+  .app-name{font-family:'Fraunces',serif;font-size:17px;font-weight:500;transition:color 0.4s ease;}
+  .app-status{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ash);margin-top:2px;}
+
+  .messages{display:flex;flex-direction:column;gap:10px;min-height:64px;}
+  .bubble{
+    max-width:82%;
+    padding:10px 14px;
+    border-radius:16px;
+    font-size:14.5px;
+    line-height:1.45;
+    opacity:0;
+    transform:translateY(6px);
+    animation:rise 0.35s ease forwards;
+  }
+  @keyframes rise{to{opacity:1;transform:translateY(0);}}
+  .bubble.user{
+    align-self:flex-end;
+    background:var(--spark);
+    color:#241405;
+    border-bottom-right-radius:5px;
+  }
+  .bubble.ai{
+    align-self:flex-start;
+    background:var(--panel-2);
+    color:var(--paper);
+    border-bottom-left-radius:5px;
+  }
+
+  .quick-replies{margin-top:14px;display:flex;flex-direction:column;gap:8px;}
+  .qr-btn{
+    font-family:'Inter',sans-serif;
+    font-size:13.5px;
+    text-align:left;
+    background:transparent;
+    border:1px solid rgba(255,255,255,0.16);
+    color:var(--paper);
+    padding:9px 13px;
+    border-radius:12px;
+    cursor:pointer;
+    transition:border-color 0.2s, background 0.2s;
+  }
+  .qr-btn:hover{border-color:var(--spark);background:rgba(255,155,92,0.07);}
+  .qr-btn:focus-visible{outline:2px solid var(--spark);outline-offset:2px;}
+  .qr-btn:disabled{opacity:0.3;cursor:default;}
+
+  /* ---- memory layer ---- */
+  .memory-layer{
+    margin-top:14px;
+    background:var(--panel);
+    border-radius:var(--radius);
+    border:1px solid rgba(111,203,191,0.18);
+    padding:16px 18px;
+    transition:box-shadow 0.6s ease, border-color 0.6s ease;
+  }
+  .memory-layer.pulse{
+    box-shadow:0 0 0 1px var(--verify), 0 0 40px -6px rgba(111,203,191,0.55);
+    border-color:var(--verify);
+  }
+  .memory-label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.1em;
+    color:var(--verify);
+    margin-bottom:10px;
+  }
+  .chips{display:flex;flex-wrap:wrap;gap:8px;min-height:30px;}
+  .chip{
+    font-family:'Inter',sans-serif;
+    font-size:12.5px;
+    font-weight:500;
+    background:rgba(255,155,92,0.12);
+    border:1px solid rgba(255,155,92,0.35);
+    color:var(--paper);
+    padding:6px 12px;
+    border-radius:999px;
+    opacity:0;
+    transform:scale(0.8);
+    animation:pop 0.4s cubic-bezier(.2,1.4,.4,1) forwards;
+  }
+  @keyframes pop{to{opacity:1;transform:scale(1);}}
+  .cid-line{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    color:var(--ash);
+    margin-top:12px;
+  }
+
+  .switch-row{margin-top:18px;display:flex;justify-content:center;}
+  .switch-btn{
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:14.5px;
+    background:var(--spark);
+    color:#241405;
+    border:none;
+    padding:13px 26px;
+    border-radius:999px;
+    cursor:pointer;
+    transition:transform 0.15s ease, opacity 0.2s;
+  }
+  .switch-btn:hover:not(:disabled){transform:translateY(-1px);}
+  .switch-btn:focus-visible{outline:2px solid var(--paper);outline-offset:3px;}
+  .switch-btn:disabled{opacity:0.35;cursor:default;}
+
+  .toast{
+    text-align:center;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    color:var(--verify);
+    margin-top:10px;
+    min-height:16px;
+    opacity:0;
+    transition:opacity 0.3s ease;
+  }
+  .toast.show{opacity:1;}
+
+  /* ---- technical strip ---- */
+  .strip{
+    margin-top:52px;
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:10px;
+  }
+  @media (max-width:480px){.strip{grid-template-columns:1fr;}}
+  .card{
+    background:var(--panel);
+    border:1px solid rgba(255,255,255,0.07);
+    border-radius:14px;
+    padding:14px 14px 16px;
+  }
+  .card-tag{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    letter-spacing:0.08em;
+    color:var(--spark);
+    margin-bottom:8px;
+  }
+  .card p{margin:0;font-size:13px;color:var(--ash);line-height:1.5;}
+
+  /* ---- access list ---- */
+  .access{margin-top:32px;}
+  .access-title{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.1em;color:var(--ash);margin-bottom:12px;}
+  .access-row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 4px;
+    border-bottom:1px solid rgba(255,255,255,0.06);
+  }
+  .access-row:last-child{border-bottom:none;}
+  .access-app{display:flex;align-items:center;gap:10px;font-size:14px;}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--verify);flex-shrink:0;}
+  .dot.off{background:#5b5468;}
+  .revoke-btn{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    background:transparent;
+    border:1px solid rgba(255,255,255,0.18);
+    color:var(--ash);
+    padding:6px 11px;
+    border-radius:8px;
+    cursor:pointer;
+  }
+  .revoke-btn:hover{border-color:var(--spark);color:var(--spark);}
+  .revoke-btn:disabled{opacity:0.35;cursor:default;}
+
+  footer{
+    margin-top:48px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    color:var(--ash);
+    text-align:center;
+    line-height:1.7;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .bubble,.chip{animation:none;opacity:1;transform:none;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="wordmark">ECHO <b>·</b> A MEMORY LAYER FOR AI COMPANIONS</div>
+
+  <h1>Your memory isn&rsquo;t<br><em>theirs</em> to keep.</h1>
+  <p class="sub">Echo sits underneath whichever AI companion app you use. Talk to one, switch to another &mdash; your memory comes with you, because it was never theirs to hold onto in the first place.</p>
+
+  <!-- Chat frame -->
+  <div class="frame">
+    <div class="frame-head">
+      <div class="avatar" id="avatar" style="background:var(--lumi)">L</div>
+      <div>
+        <div class="app-name" id="appName" style="color:var(--lumi)">Lumi</div>
+        <div class="app-status" id="appStatus">reading your Echo memory</div>
+      </div>
+    </div>
+    <div class="messages" id="messages">
+      <div class="bubble ai">hey! rough week?</div>
+    </div>
+    <div class="quick-replies" id="quickReplies">
+      <button class="qr-btn" id="qr1">yeah, chem exam friday has me stressed</button>
+    </div>
+  </div>
+
+  <!-- Memory layer -->
+  <div class="memory-layer" id="memoryLayer">
+    <div class="memory-label">YOUR ECHO MEMORY &middot; STORED ON FILECOIN</div>
+    <div class="chips" id="chips"></div>
+    <div class="cid-line" id="cidLine">no memory written yet</div>
+  </div>
+
+  <div class="switch-row">
+    <button class="switch-btn" id="switchBtn" disabled>Switch to Nova →</button>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <!-- Technical strip -->
+  <div class="strip">
+    <div class="card">
+      <div class="card-tag">PERPETUAL STORAGE</div>
+      <p>Funded once. An FVM contract keeps renewing the deal, so the memory file doesn't expire when a subscription would.</p>
+    </div>
+    <div class="card">
+      <div class="card-tag">ACCESS CONTROL</div>
+      <p>You decide which app can read your memory. Revoke it from one app without losing it anywhere else.</p>
+    </div>
+    <div class="card">
+      <div class="card-tag">VERIFIABLE</div>
+      <p>Every memory is hash-checked on read, so you're trusting math, not a company's word.</p>
+    </div>
+  </div>
+
+  <!-- Access list -->
+  <div class="access">
+    <div class="access-title">APPS WITH ACCESS TO YOUR MEMORY</div>
+    <div class="access-row" id="accessLumi">
+      <div class="access-app"><span class="dot" id="dotLumi"></span> Lumi</div>
+      <button class="revoke-btn" id="revokeLumi">revoke</button>
+    </div>
+    <div class="access-row" id="accessNova" style="display:none;">
+      <div class="access-app"><span class="dot" id="dotNova"></span> Nova</div>
+      <button class="revoke-btn" id="revokeNova">revoke</button>
+    </div>
+  </div>
+
+  <footer>CONCEPT DEMO &middot; MEMORY LAYER BUILT ON FILECOIN'S FVM<br>not a real product, not real storage &mdash; this is the pitch made tangible</footer>
+
+</div>
+
+<script>
+(function(){
+  const messages = document.getElementById('messages');
+  const quickReplies = document.getElementById('quickReplies');
+  const chips = document.getElementById('chips');
+  const cidLine = document.getElementById('cidLine');
+  const switchBtn = document.getElementById('switchBtn');
+  const memoryLayer = document.getElementById('memoryLayer');
+  const toast = document.getElementById('toast');
+  const avatar = document.getElementById('avatar');
+  const appName = document.getElementById('appName');
+  const appStatus = document.getElementById('appStatus');
+  const accessNova = document.getElementById('accessNova');
+  const revokeLumi = document.getElementById('revokeLumi');
+  const revokeNova = document.getElementById('revokeNova');
+  const dotLumi = document.getElementById('dotLumi');
+  const dotNova = document.getElementById('dotNova');
+
+  let step = 0;
+  let currentApp = 'lumi';
+  const fakeCid = 'bafybeig6xv5nj9q4z2p7h3m8w1k';
+
+  function addBubble(text, who){
+    const b = document.createElement('div');
+    b.className = 'bubble ' + who;
+    b.textContent = text;
+    messages.appendChild(b);
+  }
+
+  function addChip(text){
+    const c = document.createElement('div');
+    c.className = 'chip';
+    c.textContent = text;
+    chips.appendChild(c);
+  }
+
+  function pulseMemory(){
+    memoryLayer.classList.add('pulse');
+    setTimeout(()=>memoryLayer.classList.remove('pulse'), 900);
+  }
+
+  function showToast(text){
+    toast.textContent = text;
+    toast.classList.add('show');
+    setTimeout(()=>toast.classList.remove('show'), 2600);
+  }
+
+  // Step 1
+  document.getElementById('qr1').addEventListener('click', function(){
+    addBubble('yeah, chem exam friday has me stressed', 'user');
+    setTimeout(()=>{
+      addBubble('noted — chem exam friday. you\'ve got this 💪', 'ai');
+      addChip('Chem exam: Friday');
+      cidLine.textContent = 'stored at: ' + fakeCid + 'a3 · updated just now';
+      pulseMemory();
+    }, 450);
+
+    quickReplies.innerHTML = '';
+    const qr2 = document.createElement('button');
+    qr2.className = 'qr-btn';
+    qr2.id = 'qr2';
+    qr2.textContent = 'also, remind me i hate cilantro lol';
+    quickReplies.appendChild(qr2);
+
+    qr2.addEventListener('click', function(){
+      addBubble('also, remind me i hate cilantro lol', 'user');
+      setTimeout(()=>{
+        addBubble('haha got it. no cilantro. ever.', 'ai');
+        addChip('Hates cilantro');
+        cidLine.textContent = 'stored at: ' + fakeCid + 'f9 · updated just now';
+        pulseMemory();
+        switchBtn.disabled = false;
+      }, 450);
+      qr2.disabled = true;
+    });
+  });
+
+  switchBtn.addEventListener('click', function(){
+    if (currentApp === 'lumi') {
+      switchBtn.disabled = true;
+      appStatus.textContent = 'handing off via Echo…';
+      pulseMemory();
+
+      setTimeout(()=>{
+        currentApp = 'nova';
+        avatar.style.background = 'var(--nova)';
+        avatar.textContent = 'N';
+        appName.textContent = 'Nova';
+        appName.style.color = 'var(--nova)';
+        appStatus.textContent = 'reading your Echo memory';
+
+        messages.innerHTML = '';
+        quickReplies.innerHTML = '';
+        addBubble('hey — heard about your chem exam friday. how\'s studying going? (and don\'t worry, zero cilantro, ever 😄)', 'ai');
+
+        accessNova.style.display = 'flex';
+        switchBtn.textContent = 'Switch to Lumi →';
+        switchBtn.disabled = false;
+        showToast('memory carried over via Echo — no re-introduction needed');
+      }, 900);
+    } else {
+      switchBtn.disabled = true;
+      appStatus.textContent = 'handing off via Echo…';
+      pulseMemory();
+      setTimeout(()=>{
+        currentApp = 'lumi';
+        avatar.style.background = 'var(--lumi)';
+        avatar.textContent = 'L';
+        appName.textContent = 'Lumi';
+        appName.style.color = 'var(--lumi)';
+        appStatus.textContent = 'reading your Echo memory';
+        messages.innerHTML = '';
+        quickReplies.innerHTML = '';
+        addBubble('back already? good luck friday, by the way 🍀', 'ai');
+        switchBtn.textContent = 'Switch to Nova →';
+        switchBtn.disabled = false;
+        showToast('memory carried over via Echo — no re-introduction needed');
+      }, 900);
+    }
+  });
+
+  revokeLumi.addEventListener('click', function(){
+    dotLumi.classList.add('off');
+    revokeLumi.disabled = true;
+    revokeLumi.textContent = 'revoked';
+    const novaHasAccess = accessNova.style.display !== 'none';
+    showToast(novaHasAccess
+      ? 'Lumi\'s access revoked — your memory stays safe with Nova'
+      : 'Lumi\'s access revoked — your memory is still safe, stored on Filecoin');
+  });
+
+  revokeNova.addEventListener('click', function(){
+    dotNova.classList.add('off');
+    revokeNova.disabled = true;
+    revokeNova.textContent = 'revoked';
+    showToast('Nova\'s access revoked — your memory stays safe with Lumi');
+  });
+})();
+</script>
+</body>
+</html>
