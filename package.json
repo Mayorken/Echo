@@ -1,0 +1,21 @@
+{
+  "name": "echo-contracts",
+  "version": "0.1.0",
+  "description": "Echo: portable AI-companion memory layer on Filecoin's FEVM",
+  "main": "echo-sdk.js",
+  "scripts": {
+    "compile": "node compile.js",
+    "deploy": "node deploy.js",
+    "test": "mocha test/*.test.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.17.0",
+    "solc": "^0.8.24"
+  },
+  "devDependencies": {
+    "chai": "^4.5.0",
+    "ganache": "^7.9.2",
+    "mocha": "^10.8.2"
+  }
+}
