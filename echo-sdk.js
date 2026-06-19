@@ -116,4 +116,6 @@ class EchoClient {
   }
 }
 
-module.exports = { EchoClient, generateEncryptionKey: generateKey };
+const { createLighthouseStorage } = require('./lib/storage');
+
+module.exports = { EchoClient, generateEncryptionKey: generateKey, createLighthouseStorage };
