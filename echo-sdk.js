@@ -34,6 +34,9 @@ class EchoClient {
    *        backed by whichever Filecoin storage gateway the app uses.
    */
   constructor(rpcUrl, contractAddress, signer, storage) {
+    if (!ethers.isAddress(contractAddress)) {
+      throw new Error('Invalid contract address');
+    }
     // Wrapping in a NonceManager avoids a real race we hit during testing:
     // providers can serve a momentarily stale "pending" nonce when several
     // transactions are sent back-to-back from the same address (e.g. save,
@@ -57,6 +60,12 @@ class EchoClient {
    *        user — generate one with generateEncryptionKey(). Never sent on-chain.
    */
   async saveMemory(memoryObject, encryptionKey) {
+    if (!(encryptionKey instanceof Uint8Array) || encryptionKey.length !== 32) {
+      throw new Error('encryptionKey must be a 32-byte Uint8Array');
+    }
+    if (!memoryObject || typeof memoryObject !== 'object') {
+      throw new Error('memoryObject must be a non-null object');
+    }
     const plaintext = new TextEncoder().encode(JSON.stringify(memoryObject));
     const integrityHash = ethers.keccak256(plaintext);
 
@@ -75,6 +84,12 @@ class EchoClient {
    * @param {Uint8Array} decryptionKey the same 32-byte key used in saveMemory
    */
   async loadMemory(userAddress, decryptionKey) {
+    if (!ethers.isAddress(userAddress)) {
+      throw new Error('Invalid user address');
+    }
+    if (!(decryptionKey instanceof Uint8Array) || decryptionKey.length !== 32) {
+      throw new Error('decryptionKey must be a 32-byte Uint8Array');
+    }
     const [cid, integrityHash] = await this.contract.getMemory(userAddress);
     if (!cid) return null;
 
@@ -90,24 +105,36 @@ class EchoClient {
 
   /** Grant a new AI app (by its contract/wallet address) read access to your memory. */
   async grantAccess(appAddress) {
+    if (!ethers.isAddress(appAddress)) {
+      throw new Error('Invalid app address');
+    }
     const tx = await this.contract.grantAccess(appAddress);
     return tx.wait();
   }
 
   /** Revoke a previously granted app's access — used when a user "leaves" an app. */
   async revokeAccess(appAddress) {
+    if (!ethers.isAddress(appAddress)) {
+      throw new Error('Invalid app address');
+    }
     const tx = await this.contract.revokeAccess(appAddress);
     return tx.wait();
   }
 
   /** Fund the perpetual-storage renewal endowment for your vault. */
   async fundRenewal(amountInFil) {
+    if (typeof amountInFil !== 'string' || !/^\d+(\.\d+)?$/.test(amountInFil)) {
+      throw new Error('amountInFil must be a non-negative numeric string (e.g. "1.5")');
+    }
     const tx = await this.contract.fundRenewal({ value: ethers.parseEther(amountInFil) });
     return tx.wait();
   }
 
   /** List every app ever granted access, with their current (live) status. */
   async listAccess(userAddress) {
+    if (!ethers.isAddress(userAddress)) {
+      throw new Error('Invalid user address');
+    }
     const history = await this.contract.appAccessHistory(userAddress);
     const withStatus = await Promise.all(
       history.map(async (app) => ({ app, active: await this.contract.hasAccess(userAddress, app) }))

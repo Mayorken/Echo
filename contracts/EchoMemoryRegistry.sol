@@ -55,6 +55,7 @@ contract EchoMemoryRegistry {
     event RenewalWithdrawn(address indexed user, uint256 amount);
 
     error NotAuthorized();
+    error EmptyCID();
     error NothingToWithdraw();
     error TransferFailed();
 
@@ -71,6 +72,7 @@ contract EchoMemoryRegistry {
      *        Filecoin's own Proof of Data Possession at the storage layer).
      */
     function updateMemory(string calldata cid, bytes32 integrityHash) external {
+        if (bytes(cid).length == 0) revert EmptyCID();
         MemoryVault storage vault = vaults[msg.sender];
         vault.cid = cid;
         vault.integrityHash = integrityHash;
@@ -83,9 +85,16 @@ contract EchoMemoryRegistry {
      * @param app The address representing the AI app requesting access.
      */
     function grantAccess(address app) external {
+        require(app != address(0), "Cannot grant access to zero address");
         if (!accessList[msg.sender][app]) {
             accessList[msg.sender][app] = true;
-            grantedAppsHistory[msg.sender].push(app);
+            // Only append if this is the first grant (avoid duplicates on re-grant after revoke)
+            address[] storage history = grantedAppsHistory[msg.sender];
+            bool found = false;
+            for (uint256 i = 0; i < history.length; i++) {
+                if (history[i] == app) { found = true; break; }
+            }
+            if (!found) history.push(app);
             emit AccessGranted(msg.sender, app);
         }
     }

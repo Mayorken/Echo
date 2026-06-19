@@ -676,13 +676,18 @@ function showToast(t){
 }
 
 // ── MESSAGES ──
+function escapeHTML(str){
+  var d = document.createElement('div');
+  d.appendChild(document.createTextNode(str));
+  return d.innerHTML;
+}
 function addMsg(text, type, delay){
   return new Promise(function(res){
     setTimeout(function(){
       var d = document.createElement('div');
       d.className = 'msg ' + type;
       if(typeof text === 'function') text(d);
-      else d.innerHTML = text;
+      else d.textContent = text;
       messages.insertBefore(d, typing);
       messages.scrollTop = messages.scrollHeight;
       res();
@@ -727,13 +732,22 @@ function addCtx(cat, text, aiKey){
 
   var e = document.createElement('div');
   e.className = 'ctx-entry';
-  e.innerHTML =
-    '<div class="ctx-entry-cat">'+cat+'</div>'+
-    '<div class="ctx-entry-text">'+text+'</div>'+
-    '<div class="ctx-entry-src">'+
-      '<div class="ctx-src-dot" style="background:'+AI[aiKey].cssColor+'"></div>'+
-      'written by '+AI[aiKey].name+' · encrypted · on-chain'+
-    '</div>';
+  var catDiv = document.createElement('div');
+  catDiv.className = 'ctx-entry-cat';
+  catDiv.textContent = cat;
+  var textDiv = document.createElement('div');
+  textDiv.className = 'ctx-entry-text';
+  textDiv.textContent = text;
+  var srcDiv = document.createElement('div');
+  srcDiv.className = 'ctx-entry-src';
+  var dot = document.createElement('div');
+  dot.className = 'ctx-src-dot';
+  dot.style.background = AI[aiKey].cssColor;
+  srcDiv.appendChild(dot);
+  srcDiv.appendChild(document.createTextNode('written by '+AI[aiKey].name+' \u00B7 encrypted \u00B7 on-chain'));
+  e.appendChild(catDiv);
+  e.appendChild(textDiv);
+  e.appendChild(srcDiv);
   $id('ctxEntries').appendChild(e);
   setTimeout(function(){ e.classList.add('in'); }, 40);
 }
@@ -869,8 +883,12 @@ function s2(){
     showTyping(false);
     var d = document.createElement('div');
     d.className = 'msg ai';
-    d.innerHTML = 'for the document field, here\'s the encryption wrapper you need:' +
-      '<div class="code-block">func encryptDoc(plain []byte, key []byte) ([]byte, error) {\n  block, _ := aes.NewCipher(key)\n  gcm, _ := cipher.NewGCM(block)\n  nonce := make([]byte, gcm.NonceSize())\n  io.ReadFull(rand.Reader, nonce)\n  return gcm.Seal(nonce, nonce, plain, nil), nil\n}</div>';
+    var intro = document.createTextNode('for the document field, here\'s the encryption wrapper you need:');
+    var codeBlock = document.createElement('div');
+    codeBlock.className = 'code-block';
+    codeBlock.textContent = 'func encryptDoc(plain []byte, key []byte) ([]byte, error) {\n  block, _ := aes.NewCipher(key)\n  gcm, _ := cipher.NewGCM(block)\n  nonce := make([]byte, gcm.NonceSize())\n  io.ReadFull(rand.Reader, nonce)\n  return gcm.Seal(nonce, nonce, plain, nil), nil\n}';
+    d.appendChild(intro);
+    d.appendChild(codeBlock);
     messages.insertBefore(d, typing);
     messages.scrollTop = messages.scrollHeight;
     setQRs([
