@@ -23,6 +23,10 @@ launch is scoped honestly at the bottom.
 - **`lib/crypto.js`** — real AES-256-GCM: Web Crypto API in-browser (where
   this actually runs), Node's `crypto` module as a fallback so the file is
   testable directly in Node.
+- **`lib/storage.js`** — Lighthouse storage adapter. Implements the
+  `put(bytes)->cid` / `get(cid)->bytes` interface EchoClient expects, backed
+  by real Filecoin storage via [Lighthouse](https://lighthouse.storage).
+  Upload via `uploadBuffer`, retrieval via IPFS gateway.
 - **`test/EchoMemoryRegistry.test.js`** — 13 tests against the raw contract on
   a local in-memory chain, including a test that deploys an actual malicious
   contract and tries to exploit re-entrancy, to prove the guard works rather
@@ -65,14 +69,28 @@ Worth knowing about, since they'd bite a real deployment too:
 
 ## What's intentionally still stubbed out
 
-- **Storage upload/download.** The `storage` adapter passed into `EchoClient`
-  is real in shape (the e2e tests exercise the actual `put()`/`get()` contract
-  interface) but backed by an in-memory `Map` in tests, not a live Filecoin
-  gateway. Wire it to Synapse SDK, web3.storage, or Lighthouse for real CIDs.
 - **Auto-renewal keeper.** `fundRenewal()` holds a real FIL balance per user,
   but nothing yet actually renews a storage deal from it. That needs either
   an off-chain keeper bot (faster to ship) or a dedicated FVM actor (closer
   to the actual pitch).
+
+## Using real Filecoin storage (Lighthouse)
+
+The SDK ships with a Lighthouse adapter for real Filecoin storage:
+
+```javascript
+const { EchoClient, generateEncryptionKey, createLighthouseStorage } = require('./echo-sdk');
+
+const storage = createLighthouseStorage(process.env.LIGHTHOUSE_API_KEY);
+const client  = new EchoClient(rpcUrl, contractAddress, signer, storage);
+
+// Now saveMemory/loadMemory use real Filecoin storage
+const key = await generateEncryptionKey();
+await client.saveMemory({ stack: ['Go', 'PostgreSQL'], task: 'listing endpoint' }, key);
+```
+
+Get a free API key at [files.lighthouse.storage](https://files.lighthouse.storage).
+Premium users can pass a custom gateway: `createLighthouseStorage(key, { gateway: 'https://your-gateway.io/ipfs' })`.
 
 ## Verifying it yourself
 
@@ -92,11 +110,14 @@ npm test          # 18 tests, real local chain, no network needed
 
 ## Suggested next steps for a real build
 
-1. Wire the `storage` adapter to an actual Filecoin upload/retrieval SDK.
+1. ~~Wire the `storage` adapter to an actual Filecoin upload/retrieval SDK.~~
+   **Done** — `lib/storage.js` uses Lighthouse.
 2. Decide on the renewal-keeper approach (off-chain bot vs. FVM actor) and
    build it — right now the endowment is funded but inert.
 3. Add an upgradability pattern (UUPS proxy is the common choice) before any
    mainnet deployment, so the contract can evolve without forcing every
-   integrated app to migrate to a new address.
+   integrated tool to migrate to a new address.
 4. Get a real audit before this touches real user data or real FIL at scale
    — this scaffold is tested for correctness, not reviewed for security.
+5. Build the first real AI platform integration (e.g. a ChatGPT / Claude
+   plugin that reads and writes Echo context).

@@ -10,6 +10,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@lighthouse-web3/sdk": "^0.4.6",
     "ethers": "^6.17.0",
     "solc": "^0.8.24"
   },
