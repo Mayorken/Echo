@@ -25,7 +25,7 @@ const { checkDealStatus, repinCid } = require('./renewer');
  * @param {number} [config.expiryThresholdEpochs] Epochs before expiry to trigger renewal
  * @param {string} [config.gateway] IPFS gateway URL
  * @param {function} [config.log] Logger function (defaults to console.log)
- * @returns {Promise<{scanned: number, renewed: number, errors: number, results: Array}>}
+ * @returns {Promise<{scanned: number, renewed: number, errors: number, lastBlock: number, results: Array}>}
  */
 async function runSweep(config) {
   const log = config.log || console.log;
@@ -34,8 +34,8 @@ async function runSweep(config) {
 
   log('[keeper] Starting sweep...');
 
-  const vaults = await scanFundedVaults(contract, { fromBlock: config.fromBlock || 0 });
-  log(`[keeper] Found ${vaults.length} funded vault(s)`);
+  const { vaults, lastBlock } = await scanFundedVaults(contract, { fromBlock: config.fromBlock || 0 });
+  log(`[keeper] Found ${vaults.length} funded vault(s) (scanned to block ${lastBlock})`);
 
   const results = [];
   let renewed = 0;
@@ -52,6 +52,13 @@ async function runSweep(config) {
     if (dealCheck.status === 'active') {
       log(`[keeper]   Deal is active — no action needed`);
       results.push({ user, cid, action: 'none', dealStatus: 'active' });
+      continue;
+    }
+
+    if (dealCheck.status === 'error') {
+      errors++;
+      log(`[keeper]   Deal status check failed: ${dealCheck.error || 'unknown error'} — skipping`);
+      results.push({ user, cid, action: 'error', error: dealCheck.error || 'status check failed', dealStatus: 'error' });
       continue;
     }
 
@@ -73,7 +80,7 @@ async function runSweep(config) {
 
   log(`[keeper] Sweep complete: ${vaults.length} scanned, ${renewed} renewed, ${errors} errors`);
 
-  return { scanned: vaults.length, renewed, errors, results };
+  return { scanned: vaults.length, renewed, errors, lastBlock, results };
 }
 
 /**
@@ -88,6 +95,7 @@ function startKeeper(config) {
   const log = config.log || console.log;
   let timer = null;
   let running = false;
+  let nextFromBlock = config.fromBlock || 0;
 
   async function sweep() {
     if (running) {
@@ -96,7 +104,10 @@ function startKeeper(config) {
     }
     running = true;
     try {
-      await runSweep(config);
+      const result = await runSweep({ ...config, fromBlock: nextFromBlock });
+      if (result.lastBlock > nextFromBlock) {
+        nextFromBlock = result.lastBlock;
+      }
     } catch (err) {
       log(`[keeper] Sweep error: ${err.message}`);
     }

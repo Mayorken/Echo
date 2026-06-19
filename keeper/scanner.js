@@ -13,10 +13,13 @@ const { ethers } = require('ethers');
  * Finds all users who have emitted MemoryUpdated events, then checks
  * which ones have a non-zero renewal balance.
  *
+ * Returns a `lastBlock` field so the caller can pass it as `fromBlock`
+ * on the next sweep, avoiding redundant re-scans of old blocks.
+ *
  * @param {ethers.Contract} contract EchoMemoryRegistry contract instance
  * @param {object} [options]
  * @param {number} [options.fromBlock=0] Block to start scanning from
- * @returns {Promise<Array<{user: string, cid: string, integrityHash: string, renewalBalance: bigint}>>}
+ * @returns {Promise<{vaults: Array<{user: string, cid: string, integrityHash: string, renewalBalance: bigint}>, lastBlock: number}>}
  */
 async function scanFundedVaults(contract, options) {
   const fromBlock = (options && options.fromBlock) || 0;
@@ -24,12 +27,14 @@ async function scanFundedVaults(contract, options) {
   const memoryFilter = contract.filters.MemoryUpdated();
   const memoryEvents = await contract.queryFilter(memoryFilter, fromBlock);
 
+  let lastBlock = fromBlock;
   const latestCidByUser = new Map();
   for (const event of memoryEvents) {
     const user = event.args[0];
     const cid = event.args[1];
     const integrityHash = event.args[2];
     latestCidByUser.set(user, { cid, integrityHash });
+    if (event.blockNumber > lastBlock) lastBlock = event.blockNumber;
   }
 
   const fundedVaults = [];
@@ -41,7 +46,7 @@ async function scanFundedVaults(contract, options) {
     }
   }
 
-  return fundedVaults;
+  return { vaults: fundedVaults, lastBlock };
 }
 
 module.exports = { scanFundedVaults };

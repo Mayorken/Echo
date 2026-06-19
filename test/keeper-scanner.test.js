@@ -25,21 +25,22 @@ describe('keeper/scanner.js', function () {
   });
 
   it('returns empty array when no vaults exist', async function () {
-    const vaults = await scanFundedVaults(registry);
-    expect(vaults).to.deep.equal([]);
+    const result = await scanFundedVaults(registry);
+    expect(result.vaults).to.deep.equal([]);
+    expect(result.lastBlock).to.be.a('number');
   });
 
   it('returns empty array when vaults have CIDs but no renewal balance', async function () {
     const hash = ethers.keccak256(ethers.toUtf8Bytes('test'));
     await registry.connect(owner).updateMemory('QmTestCid', hash);
-    const vaults = await scanFundedVaults(registry);
-    expect(vaults).to.deep.equal([]);
+    const result = await scanFundedVaults(registry);
+    expect(result.vaults).to.deep.equal([]);
   });
 
   it('returns empty array when vaults have renewal balance but no CID', async function () {
     await registry.connect(owner).fundRenewal({ value: ethers.parseEther('1.0') });
-    const vaults = await scanFundedVaults(registry);
-    expect(vaults).to.deep.equal([]);
+    const result = await scanFundedVaults(registry);
+    expect(result.vaults).to.deep.equal([]);
   });
 
   it('finds vaults with both a CID and a renewal balance', async function () {
@@ -48,12 +49,13 @@ describe('keeper/scanner.js', function () {
     await registry.connect(owner).updateMemory(cid, hash);
     await registry.connect(owner).fundRenewal({ value: ethers.parseEther('2.0') });
 
-    const vaults = await scanFundedVaults(registry);
-    expect(vaults).to.have.length(1);
-    expect(vaults[0].user).to.equal(owner.address);
-    expect(vaults[0].cid).to.equal(cid);
-    expect(vaults[0].integrityHash).to.equal(hash);
-    expect(vaults[0].renewalBalance).to.equal(ethers.parseEther('2.0'));
+    const result = await scanFundedVaults(registry);
+    expect(result.vaults).to.have.length(1);
+    expect(result.vaults[0].user).to.equal(owner.address);
+    expect(result.vaults[0].cid).to.equal(cid);
+    expect(result.vaults[0].integrityHash).to.equal(hash);
+    expect(result.vaults[0].renewalBalance).to.equal(ethers.parseEther('2.0'));
+    expect(result.lastBlock).to.be.a('number');
   });
 
   it('returns the latest CID when a user updates memory multiple times', async function () {
@@ -63,10 +65,10 @@ describe('keeper/scanner.js', function () {
     await registry.connect(owner).updateMemory('QmNewCid', hash2);
     await registry.connect(owner).fundRenewal({ value: ethers.parseEther('1.0') });
 
-    const vaults = await scanFundedVaults(registry);
-    expect(vaults).to.have.length(1);
-    expect(vaults[0].cid).to.equal('QmNewCid');
-    expect(vaults[0].integrityHash).to.equal(hash2);
+    const result = await scanFundedVaults(registry);
+    expect(result.vaults).to.have.length(1);
+    expect(result.vaults[0].cid).to.equal('QmNewCid');
+    expect(result.vaults[0].integrityHash).to.equal(hash2);
   });
 
   it('finds multiple funded vaults from different users', async function () {
@@ -76,9 +78,9 @@ describe('keeper/scanner.js', function () {
     await registry.connect(userA).updateMemory('QmCidB', hash);
     await registry.connect(userA).fundRenewal({ value: ethers.parseEther('0.5') });
 
-    const vaults = await scanFundedVaults(registry);
-    expect(vaults).to.have.length(2);
-    const addresses = vaults.map((v) => v.user);
+    const result = await scanFundedVaults(registry);
+    expect(result.vaults).to.have.length(2);
+    const addresses = result.vaults.map((v) => v.user);
     expect(addresses).to.include(owner.address);
     expect(addresses).to.include(userA.address);
   });

@@ -58,8 +58,8 @@ describe('keeper/index.js — runSweep', function () {
     const { scanFundedVaults } = require('../keeper/scanner');
     const registryAbi = require('../EchoMemoryRegistry.abi.json');
     const contract = new ethers.Contract(registryAddress, registryAbi, provider);
-    const vaults = await scanFundedVaults(contract);
-    expect(vaults).to.have.length(0);
+    const result = await scanFundedVaults(contract);
+    expect(result.vaults).to.have.length(0);
   });
 
   it('identifies and re-pins a CID with expiring deal status', async function () {
@@ -88,13 +88,13 @@ describe('keeper/index.js — runSweep', function () {
     const { checkDealStatus, repinCid } = require('../keeper/renewer');
     const contract = new ethers.Contract(registryAddress, registryAbi, provider);
 
-    const vaults = await scanFundedVaults(contract);
-    expect(vaults).to.have.length(1);
+    const result = await scanFundedVaults(contract);
+    expect(result.vaults).to.have.length(1);
 
-    const dealCheck = await checkDealStatus(vaults[0].cid);
+    const dealCheck = await checkDealStatus(result.vaults[0].cid);
     expect(['expiring', 'no-deal']).to.include(dealCheck.status);
 
-    const repin = await repinCid(vaults[0].cid, 'test-key');
+    const repin = await repinCid(result.vaults[0].cid, 'test-key');
     expect(repin.success).to.equal(true);
     expect(repin.newCid).to.equal('QmRePinned');
   });
@@ -114,10 +114,10 @@ describe('keeper/index.js — runSweep', function () {
     const { checkDealStatus } = require('../keeper/renewer');
     const contract = new ethers.Contract(registryAddress, registryAbi, provider);
 
-    const vaults = await scanFundedVaults(contract);
-    expect(vaults).to.have.length(1);
+    const result = await scanFundedVaults(contract);
+    expect(result.vaults).to.have.length(1);
 
-    const dealCheck = await checkDealStatus(vaults[0].cid);
+    const dealCheck = await checkDealStatus(result.vaults[0].cid);
     expect(dealCheck.status).to.equal('active');
   });
 });
