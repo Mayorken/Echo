@@ -3,14 +3,15 @@ pragma solidity ^0.8.24;
 
 /**
  * @title EchoMemoryRegistry
- * @notice A portable, user-owned memory layer for AI companion apps, built for
- *         deployment on the Filecoin EVM (FEVM).
+ * @notice Universal AI context portability layer, built for deployment on the
+ *         Filecoin EVM (FEVM).
  *
- *         The actual memory content (conversation history, learned facts about
- *         the user) never lives on-chain. It's encrypted client-side and stored
- *         on Filecoin via a storage deal; this contract only holds a pointer
- *         (the CID) to that data plus the access-control logic that decides
- *         which AI apps are allowed to read it.
+ *         The actual context (project knowledge, preferences, architectural
+ *         decisions accumulated across AI tools) never lives on-chain. It's
+ *         encrypted client-side and stored on Filecoin via a storage deal;
+ *         this contract only holds a pointer (the CID) to that data plus the
+ *         access-control logic that decides which AI tools are allowed to
+ *         read it.
  *
  *         This is a starter scaffold, not an audited production contract.
  *         Before mainnet deployment you'd want: a re-entrancy guard on the
@@ -19,9 +20,9 @@ pragma solidity ^0.8.24;
  *         checks below.
  */
 contract EchoMemoryRegistry {
-    /// @notice One memory vault per user wallet.
+    /// @notice One context vault per user wallet.
     struct MemoryVault {
-        string cid;          // Current Filecoin/IPFS CID of the encrypted memory blob
+        string cid;          // Current Filecoin/IPFS CID of the encrypted context blob
         bytes32 integrityHash; // Hash of the plaintext, checked client-side after decrypt
         uint64 updatedAt;    // Block timestamp of last write
         uint256 renewalBalance; // FIL held to fund perpetual storage renewal
@@ -30,10 +31,10 @@ contract EchoMemoryRegistry {
     /// @dev user => vault
     mapping(address => MemoryVault) private vaults;
 
-    /// @dev user => app address => has read access
+    /// @dev user => AI tool address => has read access
     mapping(address => mapping(address => bool)) private accessList;
 
-    /// @dev user => list of app addresses ever granted access (for enumeration in UIs)
+    /// @dev user => list of AI tool addresses ever granted access (for enumeration in UIs)
     mapping(address => address[]) private grantedAppsHistory;
 
     /// @dev Re-entrancy guard state, hand-rolled to avoid an external dependency.
@@ -64,8 +65,8 @@ contract EchoMemoryRegistry {
     }
 
     /**
-     * @notice Write or update the pointer to a user's encrypted memory file.
-     * @param cid Filecoin/IPFS content identifier for the encrypted memory blob.
+     * @notice Write or update the pointer to a user's encrypted context file.
+     * @param cid Filecoin/IPFS content identifier for the encrypted context blob.
      * @param integrityHash Hash of the decrypted content, used client-side to
      *        confirm the retrieved data matches what was written (paired with
      *        Filecoin's own Proof of Data Possession at the storage layer).
@@ -79,8 +80,8 @@ contract EchoMemoryRegistry {
     }
 
     /**
-     * @notice Grant a specific AI app contract/address permission to read your memory.
-     * @param app The address representing the AI app requesting access.
+     * @notice Grant a specific AI tool's contract/address permission to read your context.
+     * @param app The address representing the AI tool requesting access.
      */
     function grantAccess(address app) external {
         if (!accessList[msg.sender][app]) {
@@ -91,9 +92,9 @@ contract EchoMemoryRegistry {
     }
 
     /**
-     * @notice Revoke a previously granted app's access. This is what makes
-     *         switching apps safe: leaving one companion app doesn't mean
-     *         leaving your data exposed to it forever.
+     * @notice Revoke a previously granted tool's access. This is what makes
+     *         switching AI tools safe: leaving one platform doesn't mean
+     *         leaving your context exposed to it forever.
      */
     function revokeAccess(address app) external {
         if (accessList[msg.sender][app]) {
@@ -103,8 +104,8 @@ contract EchoMemoryRegistry {
     }
 
     /**
-     * @notice Read a user's current memory pointer. Callable by the user
-     *         themself or by any app address they've granted access to.
+     * @notice Read a user's current context pointer. Callable by the user
+     *         themself or by any AI tool address they've granted access to.
      */
     function getMemory(address user)
         external
@@ -116,7 +117,7 @@ contract EchoMemoryRegistry {
         return (vault.cid, vault.integrityHash, vault.updatedAt);
     }
 
-    /// @notice Check whether a given app currently has access to a user's memory.
+    /// @notice Check whether a given AI tool currently has access to a user's context.
     function hasAccess(address user, address app) external view returns (bool) {
         return accessList[user][app];
     }
@@ -149,7 +150,7 @@ contract EchoMemoryRegistry {
         return vaults[user].renewalBalance;
     }
 
-    /// @notice Enumerate every app ever granted access (UIs filter out revoked ones via hasAccess).
+    /// @notice Enumerate every AI tool ever granted access (UIs filter out revoked ones via hasAccess).
     function appAccessHistory(address user) external view returns (address[] memory) {
         return grantedAppsHistory[user];
     }
