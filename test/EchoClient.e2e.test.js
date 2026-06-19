@@ -3,6 +3,7 @@ const ganache = require('ganache');
 const { ethers } = require('ethers');
 const { compileAll } = require('../compile-helper');
 const { EchoClient, generateEncryptionKey } = require('../echo-sdk');
+const { deployProxy } = require('./proxy-helper');
 
 /**
  * A minimal in-memory stand-in for a real Filecoin storage adapter (Synapse
@@ -66,13 +67,7 @@ describe('EchoClient (end-to-end: real encryption + real contract + fake storage
     const appAWallet = new ethers.Wallet(appAKey, setupProvider);
     const strangerWallet = new ethers.Wallet(strangerKey, setupProvider);
 
-    const factory = new ethers.ContractFactory(
-      contracts.EchoMemoryRegistry.abi,
-      contracts.EchoMemoryRegistry.bytecode,
-      ownerWallet
-    );
-    const deployed = await factory.deploy();
-    await deployed.waitForDeployment();
+    const deployed = await deployProxy(contracts.EchoMemoryRegistry, ownerWallet);
     const registryAddress = await deployed.getAddress();
 
     const teardown = async () => {

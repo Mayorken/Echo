@@ -38,10 +38,22 @@ describe('compile-helper.js', function () {
       'withdrawRenewal',
       'renewalBalanceOf',
       'appAccessHistory',
+      'initialize',
+      'owner',
+      'upgradeToAndCall',
+      'proxiableUUID',
     ];
     for (const fn of expected) {
       expect(names).to.include(fn);
     }
+  });
+
+  it('returns EchoMemoryRegistryV2 with abi and bytecode', function () {
+    expect(result).to.have.property('EchoMemoryRegistryV2');
+    const v2Names = result.EchoMemoryRegistryV2.abi
+      .filter((e) => e.type === 'function')
+      .map((e) => e.name);
+    expect(v2Names).to.include('version');
   });
 
   it('EchoMemoryRegistry ABI contains expected events', function () {

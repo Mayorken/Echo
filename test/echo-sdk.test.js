@@ -3,6 +3,7 @@ const ganache = require('ganache');
 const { ethers } = require('ethers');
 const { compileAll } = require('../compile-helper');
 const { EchoClient, generateEncryptionKey } = require('../echo-sdk');
+const { deployProxy } = require('./proxy-helper');
 
 function makeFakeStorage() {
   const blobs = new Map();
@@ -55,13 +56,7 @@ describe('EchoClient unit tests', function () {
     const appBWallet = new ethers.Wallet(appBKey, setupProvider);
     const strangerWallet = new ethers.Wallet(strangerKey, setupProvider);
 
-    const factory = new ethers.ContractFactory(
-      contracts.EchoMemoryRegistry.abi,
-      contracts.EchoMemoryRegistry.bytecode,
-      ownerWallet
-    );
-    const deployed = await factory.deploy();
-    await deployed.waitForDeployment();
+    const deployed = await deployProxy(contracts.EchoMemoryRegistry, ownerWallet);
     const registryAddress = await deployed.getAddress();
 
     const teardown = async () => {
