@@ -3,473 +3,983 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Echo — your memory, not theirs</title>
+<title>Echo — your AI context, everywhere</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
-  :root{
-    --ink:#15101F;
-    --panel:#211934;
-    --panel-2:#2A2140;
-    --paper:#F3ECE3;
-    --ash:#9C8FB0;
-    --spark:#FF9B5C;
-    --spark-dim:#7A5238;
-    --verify:#6FCBBF;
-    --lumi:#9B7FE8;
-    --nova:#6FCBBF;
-    --radius:18px;
-  }
+:root {
+  --ink: #0C0A14;
+  --panel: #131120;
+  --panel-2: #1A1730;
+  --panel-3: #211E3A;
+  --paper: #EDE6DC;
+  --ash: #7A6E90;
+  --spark: #FF8B4C;
+  --verify: #5EC4B4;
+  --danger: #E05555;
+  --codex: #4A9EF5;
+  --claude: #CC7A4A;
+  --gemini: #7B68EE;
+  --radius: 14px;
+  --radius-sm: 9px;
+}
 
-  *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
-  body{
-    background:var(--ink);
-    color:var(--paper);
-    font-family:'Inter',sans-serif;
-    -webkit-font-smoothing:antialiased;
-    padding:48px 20px 80px;
-    min-height:100vh;
-  }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--ink); color: var(--paper); font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; height: 100%; }
 
-  .wrap{max-width:560px;margin:0 auto;}
+/* ══════════════════════════════════
+   CRISIS SCREEN
+══════════════════════════════════ */
+#crisisScreen {
+  position: fixed; inset: 0; background: var(--ink);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; opacity: 1; transition: opacity 0.7s ease;
+  padding: 20px;
+}
+#crisisScreen.out { opacity: 0; pointer-events: none; }
 
-  .wordmark{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:13px;
-    letter-spacing:0.18em;
-    color:var(--ash);
-    margin-bottom:36px;
-  }
-  .wordmark b{color:var(--spark);font-weight:500;}
+.crisis-card {
+  max-width: 500px; width: 100%;
+  background: var(--panel);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+}
 
-  h1{
-    font-family:'Fraunces',serif;
-    font-weight:500;
-    font-size:clamp(30px,6vw,42px);
-    line-height:1.12;
-    margin:0 0 16px;
-    letter-spacing:-0.01em;
-  }
-  h1 em{font-style:italic;color:var(--spark);}
+.crisis-header {
+  background: #100A0A;
+  padding: 16px 20px;
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid rgba(224,85,85,0.2);
+}
+.crisis-header-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--codex); }
+.crisis-header-name { font-size: 13px; color: var(--ash); font-family: 'IBM Plex Mono', monospace; }
 
-  .sub{
-    color:var(--ash);
-    font-size:16px;
-    line-height:1.55;
-    max-width:440px;
-    margin:0 0 40px;
-  }
+.crisis-body-wrap {
+  padding: 24px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  position: relative; overflow: hidden;
+}
+.crisis-body-wrap::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--danger), transparent);
+  animation: crisis-scan 2.5s ease-in-out infinite;
+}
+@keyframes crisis-scan { 0%,100%{opacity:0.4} 50%{opacity:1} }
 
-  /* ---- chat frame ---- */
-  .frame{
-    background:var(--panel);
-    border-radius:var(--radius);
-    padding:18px 18px 20px;
-    border:1px solid rgba(255,255,255,0.06);
-    box-shadow:0 24px 60px -24px rgba(0,0,0,0.5);
-  }
-  .frame-head{
-    display:flex;
-    align-items:center;
-    gap:12px;
-    padding-bottom:14px;
-    margin-bottom:14px;
-    border-bottom:1px solid rgba(255,255,255,0.07);
-  }
-  .avatar{
-    width:38px;height:38px;border-radius:50%;
-    display:flex;align-items:center;justify-content:center;
-    font-family:'Fraunces',serif;font-weight:600;font-size:16px;
-    color:var(--ink);
-    transition:background 0.5s ease;
-    flex-shrink:0;
-  }
-  .app-name{font-family:'Fraunces',serif;font-size:17px;font-weight:500;transition:color 0.4s ease;}
-  .app-status{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ash);margin-top:2px;}
+.crisis-emoji { font-size: 32px; display: block; margin-bottom: 14px; }
+.crisis-title {
+  font-family: 'Fraunces', serif; font-size: 22px; font-weight: 500;
+  color: #E88; margin-bottom: 10px; line-height: 1.25;
+}
+.crisis-text { font-size: 13.5px; color: var(--ash); line-height: 1.65; margin-bottom: 18px; }
+.crisis-text strong { color: #cc8; }
 
-  .messages{display:flex;flex-direction:column;gap:10px;min-height:64px;}
-  .bubble{
-    max-width:82%;
-    padding:10px 14px;
-    border-radius:16px;
-    font-size:14.5px;
-    line-height:1.45;
-    opacity:0;
-    transform:translateY(6px);
-    animation:rise 0.35s ease forwards;
-  }
-  @keyframes rise{to{opacity:1;transform:translateY(0);}}
-  .bubble.user{
-    align-self:flex-end;
-    background:var(--spark);
-    color:#241405;
-    border-bottom-right-radius:5px;
-  }
-  .bubble.ai{
-    align-self:flex-start;
-    background:var(--panel-2);
-    color:var(--paper);
-    border-bottom-left-radius:5px;
-  }
+.crisis-stats { display: flex; gap: 0; margin-bottom: 18px; }
+.crisis-stat {
+  flex: 1; padding: 12px 0; text-align: center;
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+.crisis-stat:last-child { border-right: none; }
+.crisis-stat-num { font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: var(--danger); font-weight: 500; }
+.crisis-stat-label { font-size: 10.5px; color: var(--ash); margin-top: 3px; }
 
-  .quick-replies{margin-top:14px;display:flex;flex-direction:column;gap:8px;}
-  .qr-btn{
-    font-family:'Inter',sans-serif;
-    font-size:13.5px;
-    text-align:left;
-    background:transparent;
-    border:1px solid rgba(255,255,255,0.16);
-    color:var(--paper);
-    padding:9px 13px;
-    border-radius:12px;
-    cursor:pointer;
-    transition:border-color 0.2s, background 0.2s;
-  }
-  .qr-btn:hover{border-color:var(--spark);background:rgba(255,155,92,0.07);}
-  .qr-btn:focus-visible{outline:2px solid var(--spark);outline-offset:2px;}
-  .qr-btn:disabled{opacity:0.3;cursor:default;}
+.crisis-footer {
+  padding: 16px 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.crisis-footer-text { font-size: 12.5px; color: var(--ash); line-height: 1.5; }
+.crisis-footer-text strong { color: var(--verify); }
 
-  /* ---- memory layer ---- */
-  .memory-layer{
-    margin-top:14px;
-    background:var(--panel);
-    border-radius:var(--radius);
-    border:1px solid rgba(111,203,191,0.18);
-    padding:16px 18px;
-    transition:box-shadow 0.6s ease, border-color 0.6s ease;
-  }
-  .memory-layer.pulse{
-    box-shadow:0 0 0 1px var(--verify), 0 0 40px -6px rgba(111,203,191,0.55);
-    border-color:var(--verify);
-  }
-  .memory-label{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11px;
-    letter-spacing:0.1em;
-    color:var(--verify);
-    margin-bottom:10px;
-  }
-  .chips{display:flex;flex-wrap:wrap;gap:8px;min-height:30px;}
-  .chip{
-    font-family:'Inter',sans-serif;
-    font-size:12.5px;
-    font-weight:500;
-    background:rgba(255,155,92,0.12);
-    border:1px solid rgba(255,155,92,0.35);
-    color:var(--paper);
-    padding:6px 12px;
-    border-radius:999px;
-    opacity:0;
-    transform:scale(0.8);
-    animation:pop 0.4s cubic-bezier(.2,1.4,.4,1) forwards;
-  }
-  @keyframes pop{to{opacity:1;transform:scale(1);}}
-  .cid-line{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:10.5px;
-    color:var(--ash);
-    margin-top:12px;
-  }
+.begin-btn {
+  flex-shrink: 0;
+  background: var(--spark); color: #1a0800;
+  border: none; padding: 11px 22px;
+  border-radius: 999px;
+  font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px;
+  cursor: pointer; transition: transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 0 24px rgba(255,139,76,0.35);
+  white-space: nowrap;
+}
+.begin-btn:hover { transform: translateY(-1px); box-shadow: 0 0 36px rgba(255,139,76,0.5); }
 
-  .switch-row{margin-top:18px;display:flex;justify-content:center;}
-  .switch-btn{
-    font-family:'Inter',sans-serif;
-    font-weight:600;
-    font-size:14.5px;
-    background:var(--spark);
-    color:#241405;
-    border:none;
-    padding:13px 26px;
-    border-radius:999px;
-    cursor:pointer;
-    transition:transform 0.15s ease, opacity 0.2s;
-  }
-  .switch-btn:hover:not(:disabled){transform:translateY(-1px);}
-  .switch-btn:focus-visible{outline:2px solid var(--paper);outline-offset:3px;}
-  .switch-btn:disabled{opacity:0.35;cursor:default;}
+/* ══════════════════════════════════
+   MAIN APP
+══════════════════════════════════ */
+#app {
+  display: flex; flex-direction: column; height: 100vh;
+  opacity: 0; transition: opacity 0.7s ease;
+  pointer-events: none;
+}
+#app.visible { opacity: 1; pointer-events: all; }
 
-  .toast{
-    text-align:center;
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11.5px;
-    color:var(--verify);
-    margin-top:10px;
-    min-height:16px;
-    opacity:0;
-    transition:opacity 0.3s ease;
-  }
-  .toast.show{opacity:1;}
+/* TOP BAR */
+.topbar {
+  background: var(--panel); border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 0 24px; height: 52px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0;
+}
+.logo { font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.18em; color: var(--ash); }
+.logo b { color: var(--spark); font-weight: 500; }
+.topbar-mid { display: flex; gap: 4px; }
+.ai-tab {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 14px; border-radius: 999px;
+  font-size: 12.5px; cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s; color: var(--ash);
+  background: transparent;
+  font-family: 'Inter', sans-serif;
+}
+.ai-tab:hover:not(.active):not(:disabled) { color: var(--paper); background: rgba(255,255,255,0.04); }
+.ai-tab.active { color: var(--paper); background: var(--panel-2); border-color: rgba(255,255,255,0.1); }
+.ai-tab:disabled { opacity: 0.3; cursor: default; }
+.ai-tab-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.topbar-right {
+  display: flex; align-items: center; gap: 7px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--verify);
+}
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--verify); animation: livepulse 2s ease infinite; }
+@keyframes livepulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-  /* ---- technical strip ---- */
-  .strip{
-    margin-top:52px;
-    display:grid;
-    grid-template-columns:1fr 1fr 1fr;
-    gap:10px;
-  }
-  @media (max-width:480px){.strip{grid-template-columns:1fr;}}
-  .card{
-    background:var(--panel);
-    border:1px solid rgba(255,255,255,0.07);
-    border-radius:14px;
-    padding:14px 14px 16px;
-  }
-  .card-tag{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:10.5px;
-    letter-spacing:0.08em;
-    color:var(--spark);
-    margin-bottom:8px;
-  }
-  .card p{margin:0;font-size:13px;color:var(--ash);line-height:1.5;}
+/* MAIN CONTENT AREA */
+.content { display: flex; flex: 1; overflow: hidden; }
 
-  /* ---- access list ---- */
-  .access{margin-top:32px;}
-  .access-title{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.1em;color:var(--ash);margin-bottom:12px;}
-  .access-row{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:10px 4px;
-    border-bottom:1px solid rgba(255,255,255,0.06);
-  }
-  .access-row:last-child{border-bottom:none;}
-  .access-app{display:flex;align-items:center;gap:10px;font-size:14px;}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--verify);flex-shrink:0;}
-  .dot.off{background:#5b5468;}
-  .revoke-btn{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11px;
-    background:transparent;
-    border:1px solid rgba(255,255,255,0.18);
-    color:var(--ash);
-    padding:6px 11px;
-    border-radius:8px;
-    cursor:pointer;
-  }
-  .revoke-btn:hover{border-color:var(--spark);color:var(--spark);}
-  .revoke-btn:disabled{opacity:0.35;cursor:default;}
+/* LEFT: CONTEXT PANEL */
+.context-panel {
+  width: 320px; flex-shrink: 0;
+  background: var(--panel);
+  border-right: 1px solid rgba(255,255,255,0.06);
+  overflow-y: auto; padding: 16px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.context-panel::-webkit-scrollbar { width: 3px; }
+.context-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); }
 
-  footer{
-    margin-top:48px;
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11px;
-    color:var(--ash);
-    text-align:center;
-    line-height:1.7;
-  }
+.ctx-section-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9.5px; letter-spacing: 0.14em;
+  color: var(--ash); text-transform: uppercase; margin-bottom: 8px;
+}
 
-  @media (prefers-reduced-motion: reduce){
-    .bubble,.chip{animation:none;opacity:1;transform:none;}
-  }
+/* project card */
+.project-card {
+  background: var(--panel-2); border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.06); padding: 12px;
+}
+.project-header { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.project-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--codex), var(--gemini));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+}
+.project-name { font-size: 13.5px; font-weight: 500; }
+.project-sub { font-size: 10.5px; color: var(--ash); margin-top: 1px; }
+.project-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; color: var(--ash);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px; padding: 3px 7px;
+}
+
+/* context entries */
+.ctx-entries { display: flex; flex-direction: column; gap: 7px; }
+.ctx-entry {
+  background: var(--panel-2); border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-left: 2px solid var(--spark);
+  padding: 9px 11px;
+  opacity: 0; transform: translateX(-6px);
+  transition: opacity 0.4s, transform 0.4s;
+}
+.ctx-entry.in { opacity: 1; transform: translateX(0); }
+.ctx-entry-cat {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; letter-spacing: 0.1em;
+  color: var(--spark); margin-bottom: 4px;
+}
+.ctx-entry-text { font-size: 12px; line-height: 1.45; color: var(--paper); }
+.ctx-entry-src {
+  font-size: 10px; color: var(--ash); margin-top: 3px;
+  display: flex; align-items: center; gap: 4px;
+}
+.ctx-src-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+/* chain proof */
+.chain-box {
+  background: var(--panel-2); border-radius: var(--radius-sm);
+  border: 1px solid rgba(94,196,180,0.18); padding: 11px;
+}
+.chain-box-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9.5px; letter-spacing: 0.12em;
+  color: var(--verify); margin-bottom: 9px;
+}
+.chain-field { margin-bottom: 7px; }
+.chain-field-key { font-size: 9.5px; color: var(--ash); margin-bottom: 2px; }
+.chain-field-val {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; color: var(--paper);
+  word-break: break-all; line-height: 1.4;
+}
+.chain-field-val.green { color: var(--verify); }
+.verified-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(94,196,180,0.08);
+  border: 1px solid rgba(94,196,180,0.25);
+  border-radius: 999px; padding: 4px 10px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; color: var(--verify);
+  transition: opacity 0.4s;
+}
+
+/* access list */
+.access-list { display: flex; flex-direction: column; gap: 6px; }
+.access-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--panel-2); border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.05);
+  padding: 8px 11px;
+  transition: opacity 0.3s, border-color 0.3s;
+}
+.access-row.revoked { opacity: 0.38; border-color: rgba(224,85,85,0.15); }
+.access-info { display: flex; align-items: center; gap: 8px; }
+.access-led {
+  width: 7px; height: 7px; border-radius: 50%;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+.access-name { font-size: 12.5px; }
+.access-sub { font-size: 10px; color: var(--ash); margin-top: 1px; }
+.rev-btn {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+  background: transparent; border: 1px solid rgba(255,255,255,0.1);
+  color: var(--ash); padding: 4px 9px; border-radius: 6px;
+  cursor: pointer; transition: border-color 0.2s, color 0.2s;
+}
+.rev-btn:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+.rev-btn:disabled { opacity: 0.35; cursor: default; }
+
+/* stats row */
+.stats-row { display: flex; gap: 8px; }
+.stat-box {
+  flex: 1; background: var(--panel-2);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: var(--radius-sm); padding: 10px;
+  text-align: center;
+}
+.stat-num { font-family: 'IBM Plex Mono', monospace; font-size: 20px; color: var(--spark); font-weight: 500; }
+.stat-label { font-size: 10px; color: var(--ash); margin-top: 2px; }
+
+/* RIGHT: CHAT */
+.chat-area {
+  flex: 1; display: flex; flex-direction: column;
+  background: var(--ink); overflow: hidden;
+}
+
+.chat-header {
+  padding: 13px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex; align-items: center; gap: 13px; flex-shrink: 0;
+}
+.chat-ai-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600;
+  color: white; flex-shrink: 0; transition: background 0.5s;
+}
+.chat-ai-name { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 500; transition: color 0.4s; }
+.chat-ai-status { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ash); margin-top: 2px; }
+.chat-echo-tag {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(94,196,180,0.07);
+  border: 1px solid rgba(94,196,180,0.18);
+  border-radius: 999px; padding: 5px 12px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; color: var(--verify);
+}
+
+.messages {
+  flex: 1; overflow-y: auto; padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.messages::-webkit-scrollbar { width: 3px; }
+.messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.07); }
+
+.msg {
+  max-width: 78%; padding: 10px 14px;
+  border-radius: 14px; font-size: 13.5px; line-height: 1.55;
+  opacity: 0; transform: translateY(7px);
+  animation: msgpop 0.32s ease forwards;
+}
+@keyframes msgpop { to { opacity:1; transform:translateY(0); } }
+.msg.ai {
+  align-self: flex-start; background: var(--panel-2);
+  border-bottom-left-radius: 3px;
+}
+.msg.user {
+  align-self: flex-end; background: var(--spark);
+  color: #1a0800; border-bottom-right-radius: 3px;
+}
+.msg.sys {
+  align-self: center; max-width: 92%;
+  background: rgba(94,196,180,0.06);
+  border: 1px solid rgba(94,196,180,0.18);
+  color: var(--verify); font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px; text-align: center; border-radius: 8px; padding: 7px 14px;
+}
+.msg.warn {
+  align-self: center; max-width: 92%;
+  background: rgba(224,85,85,0.06);
+  border: 1px solid rgba(224,85,85,0.2);
+  color: #e88; font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px; text-align: center; border-radius: 8px; padding: 7px 14px;
+}
+.msg .code-block {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11.5px; background: rgba(0,0,0,0.3);
+  border-radius: 6px; padding: 8px 10px; margin-top: 8px;
+  line-height: 1.5; color: #a8d8a8; white-space: pre-wrap;
+}
+
+.typing {
+  align-self: flex-start; display: none;
+  background: var(--panel-2); border-radius: 14px; border-bottom-left-radius: 3px;
+  padding: 12px 16px; gap: 4px; align-items: center;
+}
+.typing.show { display: flex; }
+.typing-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--ash);
+  animation: tdot 1.1s ease infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+@keyframes tdot { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
+
+.qrs {
+  padding: 10px 20px 14px; flex-shrink: 0;
+  display: flex; flex-wrap: wrap; gap: 7px;
+}
+.qr {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.13);
+  color: var(--paper); padding: 7px 14px;
+  border-radius: 999px; font-size: 12.5px;
+  cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: border-color 0.2s, background 0.2s;
+}
+.qr:hover { border-color: var(--spark); background: rgba(255,139,76,0.06); }
+.qr:disabled { opacity: 0.3; cursor: default; }
+
+/* SWITCH OVERLAY */
+#switchOverlay {
+  position: fixed; inset: 0; background: rgba(12,10,20,0.94);
+  backdrop-filter: blur(10px);
+  display: none; flex-direction: column;
+  align-items: center; justify-content: center; gap: 18px;
+  z-index: 50;
+}
+#switchOverlay.on { display: flex; }
+.sw-title { font-family: 'Fraunces', serif; font-size: 24px; font-weight: 400; text-align: center; }
+.sw-sub { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ash); }
+.sw-steps { display: flex; flex-direction: column; gap: 10px; width: 300px; }
+.sw-step {
+  display: flex; align-items: center; gap: 10px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--ash);
+  opacity: 0; transform: translateY(5px);
+  transition: opacity 0.3s, transform 0.3s;
+}
+.sw-step.on { opacity: 1; transform: translateY(0); }
+.sw-spin {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid rgba(94,196,180,0.2); border-top-color: var(--verify);
+  animation: spin 0.7s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.sw-check { color: var(--verify); font-size: 14px; flex-shrink: 0; width: 14px; text-align: center; }
+
+/* TOAST */
+#toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--panel-3);
+  border: 1px solid rgba(94,196,180,0.28);
+  border-radius: 999px; padding: 9px 20px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--verify);
+  opacity: 0; transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none; white-space: nowrap;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  z-index: 200;
+}
+#toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (max-width: 720px) {
+  .context-panel { display: none; }
+  .topbar-mid { gap: 2px; }
+  .ai-tab { padding: 5px 10px; font-size: 11px; }
+}
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <div class="wordmark">ECHO <b>·</b> A MEMORY LAYER FOR AI COMPANIONS</div>
-
-  <h1>Your memory isn&rsquo;t<br><em>theirs</em> to keep.</h1>
-  <p class="sub">Echo sits underneath whichever AI companion app you use. Talk to one, switch to another &mdash; your memory comes with you, because it was never theirs to hold onto in the first place.</p>
-
-  <!-- Chat frame -->
-  <div class="frame">
-    <div class="frame-head">
-      <div class="avatar" id="avatar" style="background:var(--lumi)">L</div>
-      <div>
-        <div class="app-name" id="appName" style="color:var(--lumi)">Lumi</div>
-        <div class="app-status" id="appStatus">reading your Echo memory</div>
+<!-- ── CRISIS SCREEN ── -->
+<div id="crisisScreen">
+  <div class="crisis-card">
+    <div class="crisis-header">
+      <div class="crisis-header-dot"></div>
+      <div class="crisis-header-name">Codex · workspace notification</div>
+    </div>
+    <div class="crisis-body-wrap">
+      <span class="crisis-emoji">⚠️</span>
+      <div class="crisis-title">Your AI context has been wiped.</div>
+      <div class="crisis-text">
+        Codex has migrated to a new model architecture. All stored user context, project preferences, coding patterns, and conversation history has been <strong>permanently reset</strong>. Your next session starts from zero.
+      </div>
+      <div class="crisis-stats">
+        <div class="crisis-stat">
+          <div class="crisis-stat-num">6mo</div>
+          <div class="crisis-stat-label">of context lost</div>
+        </div>
+        <div class="crisis-stat">
+          <div class="crisis-stat-num">340+</div>
+          <div class="crisis-stat-label">sessions wiped</div>
+        </div>
+        <div class="crisis-stat">
+          <div class="crisis-stat-num">0</div>
+          <div class="crisis-stat-label">days warning</div>
+        </div>
       </div>
     </div>
-    <div class="messages" id="messages">
-      <div class="bubble ai">hey! rough week?</div>
-    </div>
-    <div class="quick-replies" id="quickReplies">
-      <button class="qr-btn" id="qr1">yeah, chem exam friday has me stressed</button>
-    </div>
-  </div>
-
-  <!-- Memory layer -->
-  <div class="memory-layer" id="memoryLayer">
-    <div class="memory-label">YOUR ECHO MEMORY &middot; STORED ON FILECOIN</div>
-    <div class="chips" id="chips"></div>
-    <div class="cid-line" id="cidLine">no memory written yet</div>
-  </div>
-
-  <div class="switch-row">
-    <button class="switch-btn" id="switchBtn" disabled>Switch to Nova →</button>
-  </div>
-  <div class="toast" id="toast"></div>
-
-  <!-- Technical strip -->
-  <div class="strip">
-    <div class="card">
-      <div class="card-tag">PERPETUAL STORAGE</div>
-      <p>Funded once. An FVM contract keeps renewing the deal, so the memory file doesn't expire when a subscription would.</p>
-    </div>
-    <div class="card">
-      <div class="card-tag">ACCESS CONTROL</div>
-      <p>You decide which app can read your memory. Revoke it from one app without losing it anywhere else.</p>
-    </div>
-    <div class="card">
-      <div class="card-tag">VERIFIABLE</div>
-      <p>Every memory is hash-checked on read, so you're trusting math, not a company's word.</p>
+    <div class="crisis-footer">
+      <div class="crisis-footer-text">
+        This happens because your context lives<br>inside their servers. <strong>Echo changes that.</strong>
+      </div>
+      <button class="begin-btn" id="beginBtn">See how →</button>
     </div>
   </div>
-
-  <!-- Access list -->
-  <div class="access">
-    <div class="access-title">APPS WITH ACCESS TO YOUR MEMORY</div>
-    <div class="access-row" id="accessLumi">
-      <div class="access-app"><span class="dot" id="dotLumi"></span> Lumi</div>
-      <button class="revoke-btn" id="revokeLumi">revoke</button>
-    </div>
-    <div class="access-row" id="accessNova" style="display:none;">
-      <div class="access-app"><span class="dot" id="dotNova"></span> Nova</div>
-      <button class="revoke-btn" id="revokeNova">revoke</button>
-    </div>
-  </div>
-
-  <footer>CONCEPT DEMO &middot; MEMORY LAYER BUILT ON FILECOIN'S FVM<br>not a real product, not real storage &mdash; this is the pitch made tangible</footer>
-
 </div>
+
+<!-- ── MAIN APP ── -->
+<div id="app">
+
+  <div class="topbar">
+    <div class="logo">ECHO <b>·</b> UNIVERSAL AI CONTEXT</div>
+    <div class="topbar-mid">
+      <button class="ai-tab active" id="tabCodex" disabled>
+        <div class="ai-tab-dot" style="background:var(--codex)"></div> Codex
+      </button>
+      <button class="ai-tab" id="tabClaude" disabled>
+        <div class="ai-tab-dot" style="background:var(--claude)"></div> Claude
+      </button>
+      <button class="ai-tab" id="tabGemini" disabled>
+        <div class="ai-tab-dot" style="background:var(--gemini)"></div> Gemini
+      </button>
+    </div>
+    <div class="topbar-right">
+      <div class="live-dot"></div>
+      context secured on Filecoin
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- LEFT PANEL -->
+    <div class="context-panel">
+
+      <div>
+        <div class="ctx-section-title">Active Project</div>
+        <div class="project-card">
+          <div class="project-header">
+            <div class="project-icon">⚡</div>
+            <div>
+              <div class="project-name">Landrush API</div>
+              <div class="project-sub">Go backend · REST + gRPC</div>
+            </div>
+          </div>
+          <div class="project-tags">
+            <div class="tag">Go 1.22</div>
+            <div class="tag">PostgreSQL</div>
+            <div class="tag">Filecoin</div>
+            <div class="tag">Docker</div>
+            <div class="tag">AES-256-GCM</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="ctx-section-title">Context Log</div>
+        <div class="ctx-entries" id="ctxEntries"></div>
+      </div>
+
+      <div>
+        <div class="ctx-section-title">On-Chain Proof</div>
+        <div class="chain-box">
+          <div class="chain-box-title">FILECOIN STORAGE RECEIPT</div>
+          <div class="chain-field">
+            <div class="chain-field-key">CID</div>
+            <div class="chain-field-val green" id="chainCid">awaiting first context write...</div>
+          </div>
+          <div class="chain-field">
+            <div class="chain-field-key">TX HASH</div>
+            <div class="chain-field-val" id="chainTx">—</div>
+          </div>
+          <div class="chain-field">
+            <div class="chain-field-key">INTEGRITY</div>
+            <div class="chain-field-val" id="chainHash">—</div>
+          </div>
+          <div class="verified-badge" id="verifiedBadge" style="opacity:0.25">
+            ⬡ unverified
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="ctx-section-title">AI Access Control</div>
+        <div class="access-list">
+          <div class="access-row" id="rowCodex">
+            <div class="access-info">
+              <div class="access-led" id="ledCodex" style="background:var(--codex);box-shadow:0 0 6px var(--codex)"></div>
+              <div>
+                <div class="access-name">Codex</div>
+                <div class="access-sub" id="codexSub">active · read/write</div>
+              </div>
+            </div>
+            <button class="rev-btn" id="revCodex">revoke</button>
+          </div>
+          <div class="access-row" id="rowClaude" style="display:none">
+            <div class="access-info">
+              <div class="access-led" id="ledClaude" style="background:var(--claude);box-shadow:0 0 6px var(--claude)"></div>
+              <div>
+                <div class="access-name">Claude</div>
+                <div class="access-sub" id="claudeSub">active · read/write</div>
+              </div>
+            </div>
+            <button class="rev-btn" id="revClaude">revoke</button>
+          </div>
+          <div class="access-row" id="rowGemini" style="display:none">
+            <div class="access-info">
+              <div class="access-led" id="ledGemini" style="background:var(--gemini);box-shadow:0 0 6px var(--gemini)"></div>
+              <div>
+                <div class="access-name">Gemini</div>
+                <div class="access-sub" id="geminiSub">active · read only</div>
+              </div>
+            </div>
+            <button class="rev-btn" id="revGemini">revoke</button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="ctx-section-title">Session Stats</div>
+        <div class="stats-row">
+          <div class="stat-box">
+            <div class="stat-num" id="statCtx">0</div>
+            <div class="stat-label">context writes</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-num" id="statSwitch">0</div>
+            <div class="stat-label">AI switches</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-num" id="statLost">0</div>
+            <div class="stat-label">context lost</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- CHAT AREA -->
+    <div class="chat-area">
+      <div class="chat-header">
+        <div class="chat-ai-avatar" id="chatAvatar" style="background:var(--codex)">C</div>
+        <div>
+          <div class="chat-ai-name" id="chatName" style="color:var(--codex)">Codex</div>
+          <div class="chat-ai-status" id="chatStatus">loading your Echo context...</div>
+        </div>
+        <div class="chat-echo-tag">
+          ⬡ Echo · context portable
+        </div>
+      </div>
+
+      <div class="messages" id="messages">
+        <div class="typing" id="typing">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+      </div>
+
+      <div class="qrs" id="qrs"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- SWITCH OVERLAY -->
+<div id="switchOverlay">
+  <div class="sw-title" id="swTitle">Switching to Claude</div>
+  <div class="sw-sub">Your context travels with you · secured by Filecoin</div>
+  <div class="sw-steps">
+    <div class="sw-step" id="sw1"><div class="sw-spin"></div> Encrypting context snapshot</div>
+    <div class="sw-step" id="sw2"><div class="sw-spin"></div> Verifying on-chain integrity hash</div>
+    <div class="sw-step" id="sw3"><div class="sw-spin"></div> Granting access to new AI</div>
+    <div class="sw-step" id="sw4"><div class="sw-spin"></div> Injecting context into session</div>
+  </div>
+</div>
+
+<div id="toast"></div>
 
 <script>
 (function(){
-  const messages = document.getElementById('messages');
-  const quickReplies = document.getElementById('quickReplies');
-  const chips = document.getElementById('chips');
-  const cidLine = document.getElementById('cidLine');
-  const switchBtn = document.getElementById('switchBtn');
-  const memoryLayer = document.getElementById('memoryLayer');
-  const toast = document.getElementById('toast');
-  const avatar = document.getElementById('avatar');
-  const appName = document.getElementById('appName');
-  const appStatus = document.getElementById('appStatus');
-  const accessNova = document.getElementById('accessNova');
-  const revokeLumi = document.getElementById('revokeLumi');
-  const revokeNova = document.getElementById('revokeNova');
-  const dotLumi = document.getElementById('dotLumi');
-  const dotNova = document.getElementById('dotNova');
 
-  let step = 0;
-  let currentApp = 'lumi';
-  const fakeCid = 'bafybeig6xv5nj9q4z2p7h3m8w1k';
+var AI = {
+  codex:  { name:'Codex',  letter:'C', color:'var(--codex)',  cssColor:'#4A9EF5' },
+  claude: { name:'Claude', letter:'C', color:'var(--claude)', cssColor:'#CC7A4A' },
+  gemini: { name:'Gemini', letter:'G', color:'var(--gemini)', cssColor:'#7B68EE' },
+};
 
-  function addBubble(text, who){
-    const b = document.createElement('div');
-    b.className = 'bubble ' + who;
-    b.textContent = text;
-    messages.appendChild(b);
-  }
+var state = {
+  current: 'codex',
+  ctxCount: 0,
+  switchCount: 0,
+  entries: [],
+  cids: ['bafybeig6xv5nj9q4z2p7h3m8w1ka3f','bafybeif9r2m4p8xk7q1n5j6h2w3c7d9','bafybeiab3m7p9xn8q2k6j4h1w5c9d1e','bafybeic4n8q3r6p1k9j7h2w4c8e2f3g','bafybeid5o9s4t7q2l1k8h3w6c1g3h4i'],
+  txs:  ['0x4a3f8b2e...e7c291fa','0x8b1d4c9f...f3a8e205','0x2c9e7a1b...b5d4c318','0x7f2a3d8e...c8e1b429','0x1d5b6c4f...a2f7d53a'],
+  hashes: ['keccak256·0x9f3ab2c1...','keccak256·0x4e7bd5f2...','keccak256·0x2c8da3e4...','keccak256·0x7a1ef4b5...','keccak256·0x5b9fc6d3...'],
+};
 
-  function addChip(text){
-    const c = document.createElement('div');
-    c.className = 'chip';
-    c.textContent = text;
-    chips.appendChild(c);
-  }
+function $id(id){ return document.getElementById(id); }
+var messages = $id('messages');
+var typing   = $id('typing');
+var qrs      = $id('qrs');
+var toast    = $id('toast');
 
-  function pulseMemory(){
-    memoryLayer.classList.add('pulse');
-    setTimeout(()=>memoryLayer.classList.remove('pulse'), 900);
-  }
+// ── CRISIS → APP ──
+$id('beginBtn').addEventListener('click', function(){
+  $id('crisisScreen').classList.add('out');
+  setTimeout(function(){
+    $id('app').classList.add('visible');
+    boot();
+  }, 700);
+});
 
-  function showToast(text){
-    toast.textContent = text;
-    toast.classList.add('show');
-    setTimeout(()=>toast.classList.remove('show'), 2600);
-  }
+// ── TOAST ──
+function showToast(t){
+  toast.textContent = t;
+  toast.classList.add('on');
+  setTimeout(function(){ toast.classList.remove('on'); }, 3000);
+}
 
-  // Step 1
-  document.getElementById('qr1').addEventListener('click', function(){
-    addBubble('yeah, chem exam friday has me stressed', 'user');
-    setTimeout(()=>{
-      addBubble('noted — chem exam friday. you\'ve got this 💪', 'ai');
-      addChip('Chem exam: Friday');
-      cidLine.textContent = 'stored at: ' + fakeCid + 'a3 · updated just now';
-      pulseMemory();
-    }, 450);
+// ── MESSAGES ──
+function addMsg(text, type, delay){
+  return new Promise(function(res){
+    setTimeout(function(){
+      var d = document.createElement('div');
+      d.className = 'msg ' + type;
+      if(typeof text === 'function') text(d);
+      else d.innerHTML = text;
+      messages.insertBefore(d, typing);
+      messages.scrollTop = messages.scrollHeight;
+      res();
+    }, delay||0);
+  });
+}
 
-    quickReplies.innerHTML = '';
-    const qr2 = document.createElement('button');
-    qr2.className = 'qr-btn';
-    qr2.id = 'qr2';
-    qr2.textContent = 'also, remind me i hate cilantro lol';
-    quickReplies.appendChild(qr2);
+function showTyping(on){
+  typing.classList.toggle('show', on);
+  if(on) messages.scrollTop = messages.scrollHeight;
+}
 
-    qr2.addEventListener('click', function(){
-      addBubble('also, remind me i hate cilantro lol', 'user');
-      setTimeout(()=>{
-        addBubble('haha got it. no cilantro. ever.', 'ai');
-        addChip('Hates cilantro');
-        cidLine.textContent = 'stored at: ' + fakeCid + 'f9 · updated just now';
-        pulseMemory();
-        switchBtn.disabled = false;
-      }, 450);
-      qr2.disabled = true;
+function setQRs(opts){
+  qrs.innerHTML = '';
+  opts.forEach(function(o){
+    var b = document.createElement('button');
+    b.className = 'qr'; b.textContent = o.text;
+    b.addEventListener('click', function(){
+      disableQRs(); o.action();
     });
+    qrs.appendChild(b);
+  });
+}
+
+function disableQRs(){
+  qrs.querySelectorAll('.qr').forEach(function(b){ b.disabled = true; });
+}
+function clearQRs(){ qrs.innerHTML = ''; }
+
+// ── CONTEXT ENTRIES ──
+function addCtx(cat, text, aiKey){
+  state.ctxCount++;
+  $id('statCtx').textContent = state.ctxCount;
+
+  var idx = Math.min(state.ctxCount-1, state.cids.length-1);
+  $id('chainCid').textContent  = state.cids[idx];
+  $id('chainTx').textContent   = state.txs[idx];
+  $id('chainHash').textContent = state.hashes[idx];
+  var badge = $id('verifiedBadge');
+  badge.style.opacity = '1';
+  badge.textContent = '⬡ verified on Filecoin';
+
+  var e = document.createElement('div');
+  e.className = 'ctx-entry';
+  e.innerHTML =
+    '<div class="ctx-entry-cat">'+cat+'</div>'+
+    '<div class="ctx-entry-text">'+text+'</div>'+
+    '<div class="ctx-entry-src">'+
+      '<div class="ctx-src-dot" style="background:'+AI[aiKey].cssColor+'"></div>'+
+      'written by '+AI[aiKey].name+' · encrypted · on-chain'+
+    '</div>';
+  $id('ctxEntries').appendChild(e);
+  setTimeout(function(){ e.classList.add('in'); }, 40);
+}
+
+// ── SET ACTIVE AI ──
+function setAI(key){
+  state.current = key;
+  var ai = AI[key];
+  $id('chatAvatar').style.background = ai.color;
+  $id('chatAvatar').textContent = ai.letter;
+  $id('chatName').textContent = ai.name;
+  $id('chatName').style.color = ai.color;
+  $id('chatStatus').textContent = 'reading your Echo context...';
+  ['codex','claude','gemini'].forEach(function(k){
+    var tab = $id('tab'+k.charAt(0).toUpperCase()+k.slice(1));
+    if(tab) tab.classList.toggle('active', k===key);
+  });
+}
+
+// ── SWITCH OVERLAY ──
+function switchTo(key, done){
+  var overlay = $id('switchOverlay');
+  $id('swTitle').textContent = 'Switching to '+AI[key].name;
+  ['sw1','sw2','sw3','sw4'].forEach(function(id){
+    var el=$id(id); el.classList.remove('on');
+    var old=el.querySelector('.sw-check');
+    if(old){ old.outerHTML='<div class="sw-spin"></div>'; }
+  });
+  overlay.classList.add('on');
+
+  var delays=[0,550,1050,1550];
+  ['sw1','sw2','sw3','sw4'].forEach(function(id,i){
+    setTimeout(function(){
+      var el=$id(id); el.classList.add('on');
+      setTimeout(function(){
+        var sp=el.querySelector('.sw-spin');
+        if(sp) sp.outerHTML='<div class="sw-check">✓</div>';
+      }, 420);
+    }, delays[i]);
   });
 
-  switchBtn.addEventListener('click', function(){
-    if (currentApp === 'lumi') {
-      switchBtn.disabled = true;
-      appStatus.textContent = 'handing off via Echo…';
-      pulseMemory();
+  setTimeout(function(){
+    overlay.classList.remove('on');
+    state.switchCount++;
+    $id('statSwitch').textContent = state.switchCount;
+    setAI(key);
+    messages.innerHTML=''; messages.appendChild(typing);
+    clearQRs();
+    if(done) done();
+  }, 2300);
+}
 
-      setTimeout(()=>{
-        currentApp = 'nova';
-        avatar.style.background = 'var(--nova)';
-        avatar.textContent = 'N';
-        appName.textContent = 'Nova';
-        appName.style.color = 'var(--nova)';
-        appStatus.textContent = 'reading your Echo memory';
+// ── REVOKE HANDLERS ──
+function revokeAI(key){
+  $id('row'+key.charAt(0).toUpperCase()+key.slice(1)).classList.add('revoked');
+  var led=$id('led'+key.charAt(0).toUpperCase()+key.slice(1));
+  led.style.background='#333'; led.style.boxShadow='none';
+  var btn=$id('rev'+key.charAt(0).toUpperCase()+key.slice(1));
+  btn.disabled=true; btn.textContent='revoked';
+  var sub=$id(key+'Sub');
+  if(sub) sub.textContent='access revoked';
+  showToast(AI[key].name+"'s access revoked — context safe on Filecoin");
+}
 
-        messages.innerHTML = '';
-        quickReplies.innerHTML = '';
-        addBubble('hey — heard about your chem exam friday. how\'s studying going? (and don\'t worry, zero cilantro, ever 😄)', 'ai');
-
-        accessNova.style.display = 'flex';
-        switchBtn.textContent = 'Switch to Lumi →';
-        switchBtn.disabled = false;
-        showToast('memory carried over via Echo — no re-introduction needed');
-      }, 900);
-    } else {
-      switchBtn.disabled = true;
-      appStatus.textContent = 'handing off via Echo…';
-      pulseMemory();
-      setTimeout(()=>{
-        currentApp = 'lumi';
-        avatar.style.background = 'var(--lumi)';
-        avatar.textContent = 'L';
-        appName.textContent = 'Lumi';
-        appName.style.color = 'var(--lumi)';
-        appStatus.textContent = 'reading your Echo memory';
-        messages.innerHTML = '';
-        quickReplies.innerHTML = '';
-        addBubble('back already? good luck friday, by the way 🍀', 'ai');
-        switchBtn.textContent = 'Switch to Nova →';
-        switchBtn.disabled = false;
-        showToast('memory carried over via Echo — no re-introduction needed');
-      }, 900);
-    }
+['Codex','Claude','Gemini'].forEach(function(n){
+  var btn=$id('rev'+n);
+  if(btn) btn.addEventListener('click', function(){
+    revokeAI(n.toLowerCase());
   });
+});
 
-  revokeLumi.addEventListener('click', function(){
-    dotLumi.classList.add('off');
-    revokeLumi.disabled = true;
-    revokeLumi.textContent = 'revoked';
-    const novaHasAccess = accessNova.style.display !== 'none';
-    showToast(novaHasAccess
-      ? 'Lumi\'s access revoked — your memory stays safe with Nova'
-      : 'Lumi\'s access revoked — your memory is still safe, stored on Filecoin');
+// ── TAB CLICKS ──
+$id('tabClaude').addEventListener('click', function(){
+  if(state.current==='claude') return;
+  clearQRs();
+  switchTo('claude', function(){
+    showTyping(true);
+    setTimeout(function(){
+      showTyping(false);
+      addMsg("picking up where Codex left off — I can see you're building the Landrush API in Go. you mentioned the listing endpoint needs AES-256-GCM encryption on the document field. want to pick that up?", 'ai');
+      addMsg("— full context loaded from Echo · 0 context lost", 'sys');
+    }, 1400);
   });
+});
 
-  revokeNova.addEventListener('click', function(){
-    dotNova.classList.add('off');
-    revokeNova.disabled = true;
-    revokeNova.textContent = 'revoked';
-    showToast('Nova\'s access revoked — your memory stays safe with Lumi');
+$id('tabGemini').addEventListener('click', function(){
+  if(state.current==='gemini') return;
+  clearQRs();
+  $id('rowGemini').style.display='flex';
+  switchTo('gemini', function(){
+    showTyping(true);
+    setTimeout(function(){
+      showTyping(false);
+      addMsg("Gemini here. I have your Landrush API context from Echo. Go 1.22, PostgreSQL, Filecoin storage, AES-256-GCM for docs. what do you need — architecture review, research, or something else?", 'ai');
+      addMsg("— full context loaded from Echo · 0 context lost", 'sys');
+    }, 1400);
   });
+});
+
+$id('tabCodex').addEventListener('click', function(){
+  if(state.current==='codex') return;
+  clearQRs();
+  switchTo('codex', function(){
+    showTyping(true);
+    setTimeout(function(){
+      showTyping(false);
+      addMsg("back in Codex. your project context is still intact — I can see everything Claude and Gemini added to your Echo memory too. where were we?", 'ai');
+      addMsg("— full context loaded from Echo · 0 context lost", 'sys');
+    }, 1400);
+  });
+});
+
+// ── BOOT CONVERSATION ──
+function boot(){
+  setAI('codex');
+  setTimeout(function(){
+    showTyping(true);
+    setTimeout(function(){
+      showTyping(false);
+      addMsg("hey! I've loaded your Echo context. picking up where we left off on the Landrush API. you were working on the property listing endpoint — want to continue?", 'ai');
+      setQRs([
+        { text:"yes, i need help with the document encryption logic", action: s2 },
+      ]);
+    }, 1200);
+  }, 500);
+}
+
+function s2(){
+  addMsg("yes, i need help with the document encryption logic", 'user');
+  showTyping(true);
+  addCtx('TASK · ACTIVE', 'Implementing AES-256-GCM encryption for property document field in listing endpoint', 'codex');
+  setTimeout(function(){
+    showTyping(false);
+    var d = document.createElement('div');
+    d.className = 'msg ai';
+    d.innerHTML = 'for the document field, here\'s the encryption wrapper you need:' +
+      '<div class="code-block">func encryptDoc(plain []byte, key []byte) ([]byte, error) {\n  block, _ := aes.NewCipher(key)\n  gcm, _ := cipher.NewGCM(block)\n  nonce := make([]byte, gcm.NonceSize())\n  io.ReadFull(rand.Reader, nonce)\n  return gcm.Seal(nonce, nonce, plain, nil), nil\n}</div>';
+    messages.insertBefore(d, typing);
+    messages.scrollTop = messages.scrollHeight;
+    setQRs([
+      { text:"where should i store the encryption key?", action: s3 },
+    ]);
+  }, 1600);
+}
+
+function s3(){
+  addMsg("where should i store the encryption key?", 'user');
+  showTyping(true);
+  addCtx('DECISION · ARCHITECTURE', 'Encryption key management: env-var injected at runtime via Docker secret, never committed', 'codex');
+  setTimeout(function(){
+    showTyping(false);
+    addMsg("never in the codebase. inject via Docker secret at runtime — `os.Getenv(\"DOC_ENC_KEY\")` — and rotate it per-environment. I've added that decision to your Echo context so any other AI you switch to will know this too.", 'ai');
+    setQRs([
+      { text:"smart. i want to ask Claude about the Filecoin storage side", action: s4 },
+    ]);
+  }, 1500);
+}
+
+function s4(){
+  addMsg("i want to ask Claude about the Filecoin storage side", 'user');
+  clearQRs();
+  $id('rowClaude').style.display = 'flex';
+  $id('tabClaude').disabled = false;
+  $id('tabGemini').disabled = false;
+  addCtx('PREFERENCE · WORKFLOW', 'Developer switches between AI tools mid-task — context must persist across all', 'codex');
+  setTimeout(function(){
+    addMsg("switching to Claude now — your full context goes with you.", 'sys');
+    setTimeout(function(){
+      switchTo('claude', function(){
+        showTyping(true);
+        setTimeout(function(){
+          showTyping(false);
+          addMsg("got your Echo context from Codex — Landrush API, Go, the AES-256-GCM implementation, key stored as Docker secret. you want to talk Filecoin storage for the documents?", 'ai');
+          setQRs([
+            { text:"yes, should i use renterd or a gateway like Lighthouse?", action: s5 },
+          ]);
+        }, 1500);
+      });
+    }, 800);
+  }, 600);
+}
+
+function s5(){
+  addMsg("yes, should i use renterd or a gateway like Lighthouse?", 'user');
+  showTyping(true);
+  addCtx('RESEARCH · STORAGE', 'Evaluating renterd vs Lighthouse gateway for Filecoin document storage in Landrush', 'claude');
+  setTimeout(function(){
+    showTyping(false);
+    addMsg("for an MVP, Lighthouse is the faster path — HTTP API, no node to run, free tier to start. renterd gives you full control and lower costs at scale but needs a dedicated node. since you're early stage I'd start with Lighthouse and migrate later when volume justifies it.", 'ai');
+    setQRs([
+      { text:"makes sense. let me ask Gemini to review the overall architecture", action: s6 },
+    ]);
+  }, 1600);
+}
+
+function s6(){
+  addMsg("makes sense. let me ask Gemini to review the overall architecture", 'user');
+  clearQRs();
+  $id('rowGemini').style.display = 'flex';
+  addCtx('DECISION · INFRA', 'Using Lighthouse gateway for Filecoin storage at MVP stage, migrate to renterd at scale', 'claude');
+  setTimeout(function(){
+    addMsg("switching to Gemini — full context follows.", 'sys');
+    setTimeout(function(){
+      switchTo('gemini', function(){
+        showTyping(true);
+        setTimeout(function(){
+          showTyping(false);
+          addMsg("I have the full picture from Echo — Go API, AES-256-GCM encryption with Docker-secret key management, Lighthouse for Filecoin storage. the architecture looks solid. one flag: make sure you're storing the nonce alongside the ciphertext — your Go snippet prepends it which is correct, just want to confirm you're parsing it back correctly on decrypt.", 'ai');
+          setQRs([
+            { text:"good catch. now revoke Codex access and watch what happens →", action: s7 },
+          ]);
+        }, 1700);
+      });
+    }, 600);
+  }, 600);
+}
+
+function s7(){
+  addMsg("good catch. now revoke Codex access and watch what happens →", 'user');
+  clearQRs();
+  revokeAI('codex');
+  setTimeout(function(){
+    showTyping(true);
+    setTimeout(function(){
+      showTyping(false);
+      addMsg("Codex can no longer read your context — the smart contract just updated on Filecoin. but your context is still here, Claude still has it, I still have it, and it's stored permanently on-chain.", 'ai');
+      addMsg("— Codex access revoked on-chain · context intact · tx: 0x7f2a...c429", 'sys');
+      setQRs([
+        { text:"this is exactly what the AI industry needs →", action: s8 },
+      ]);
+    }, 1400);
+  }, 700);
+}
+
+function s8(){
+  addMsg("this is exactly what the AI industry needs →", 'user');
+  showTyping(true);
+  addCtx('INSIGHT · PRODUCT', 'Context portability across AI tools is the missing infrastructure layer for knowledge workers', 'gemini');
+  setTimeout(function(){
+    showTyping(false);
+    addMsg("that's Echo. your context, your rules. switch AI tools freely, revoke access instantly, and nothing gets lost — because it was never theirs to hold. permanent on Filecoin, verifiable by anyone.", 'ai');
+    addMsg("3 AI tools · "+state.ctxCount+" context writes · "+state.switchCount+" switches · 0 context lost · all proofs on-chain", 'sys');
+    $id('statLost').textContent = '0';
+  }, 1400);
+}
+
 })();
 </script>
 </body>
