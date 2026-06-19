@@ -1,22 +1,60 @@
-# Echo — technical scaffold
+# Echo — Universal AI Context Portability
 
-A working implementation of the portable AI-memory layer described in the
-product concept: one smart contract on Filecoin's EVM (FEVM) that any AI
-companion app can integrate against, so a user's memory survives switching
-apps, bans, or a company shutting down.
+The infrastructure layer that makes AI context portable — the same way OAuth
+made identity portable across the web. One smart contract on Filecoin's EVM
+(FEVM) that any AI tool can integrate against, so a user's accumulated context
+survives switching platforms, bans, or a company shutting down.
 
 This isn't a sketch — every piece below actually runs. The contract compiles,
 the full test suite passes against a real local chain, and the SDK does real
 AES-256-GCM encryption, not a placeholder. What's still missing before a real
 launch is scoped honestly at the bottom.
 
+## The problem
+
+Every knowledge worker who uses AI tools faces the same invisible tax: when
+you switch, you start over.
+
+A developer builds months of context with a coding assistant — stack
+preferences, architecture decisions, naming conventions, how they like code
+explained. All of it lives inside one company's servers. Switch to a better
+model, get your account suspended, or have the platform reset its
+infrastructure — and everything is gone.
+
+Nobody has fixed this because no centralized company has an incentive to:
+lock-in is a feature for them, not a bug.
+
+## What Echo does
+
+Echo sits underneath AI tools rather than being one itself. Every piece of
+context an AI learns about a user or project gets encrypted on the user's
+device and stored on Filecoin under a smart contract the user controls. That
+contract decides which AI tools are allowed to read it, and the user can
+change that at any time.
+
+Switch from one AI to another, and the new one picks up exactly where the
+last one left off. No re-explaining. No starting over. No platform holding
+months of accumulated context hostage.
+
+## A real scenario
+
+A developer is building an API with Codex. Codex knows their Go codebase,
+their encryption approach, their preferred patterns. They want Claude's
+opinion on the storage architecture. They switch — Claude reads their Echo
+context and responds with full awareness of the project, no introduction
+needed. They ask Gemini to review the overall design. Same context, complete
+picture. They revoke Codex's access at the end of the session. All of this
+happens seamlessly because the context was never inside any of those platforms
+— it was always the developer's, stored on Filecoin, readable only by whoever
+they authorize.
+
 ## What's in here
 
 - **`contracts/EchoMemoryRegistry.sol`** — the on-chain piece. Holds a pointer
-  (CID) to each user's encrypted memory file, the access-control logic
-  deciding which AI apps can read it, a FIL renewal endowment per user, and a
+  (CID) to each user's encrypted context file, the access-control logic
+  deciding which AI tools can read it, a FIL renewal endowment per user, and a
   re-entrancy guard on the function that pays FIL out.
-- **`echo-sdk.js`** — the client library an AI app integrates: `saveMemory`,
+- **`echo-sdk.js`** — the client library an AI tool integrates: `saveMemory`,
   `loadMemory`, `grantAccess`, `revokeAccess`, `fundRenewal`. Uses real
   AES-256-GCM encryption (`lib/crypto.js`) and wraps the signer in an
   `ethers.NonceManager` — more on why below.
@@ -27,6 +65,9 @@ launch is scoped honestly at the bottom.
   `put(bytes)->cid` / `get(cid)->bytes` interface EchoClient expects, backed
   by real Filecoin storage via [Lighthouse](https://lighthouse.storage).
   Upload via `uploadBuffer`, retrieval via IPFS gateway.
+- **`index.html`** — an interactive demo showing a developer switching between
+  Codex, Claude, and Gemini mid-project with zero context loss — the core
+  portability scenario in action.
 - **`test/EchoMemoryRegistry.test.js`** — 13 tests against the raw contract on
   a local in-memory chain, including a test that deploys an actual malicious
   contract and tries to exploit re-entrancy, to prove the guard works rather
@@ -45,10 +86,24 @@ Run `npm test` yourself — 18 tests, all passing, no network access required.
 
 | Pitch claim | Where it lives |
 |---|---|
-| "Memory never disappears" | `fundRenewal()` / `renewalBalanceOf()` — the FIL endowment pattern mirroring Filecoin's perpetual-storage actor concept |
+| "Context never disappears" | `fundRenewal()` / `renewalBalanceOf()` — the FIL endowment pattern mirroring Filecoin's perpetual-storage actor concept |
 | "You control who reads it" | `grantAccess()` / `revokeAccess()` / `hasAccess()` — a data-access-control actor pattern |
-| "Switch apps, keep your memory" | Any app holding the right ABI + a granted address can call `getMemory()` — that's the whole portability story, tested end-to-end in `EchoClient.e2e.test.js` |
+| "Switch tools, keep your context" | Any AI tool holding the right ABI + a granted address can call `getMemory()` — that's the whole portability story, tested end-to-end in `EchoClient.e2e.test.js` |
 | "Verifiable, not just promised" | `integrityHash` stored on-chain at write time, checked client-side via keccak256 on every decrypt |
+
+## Why Filecoin specifically
+
+The portability promise only works if the underlying storage is genuinely
+permanent and genuinely user-controlled. A centralized database can be
+deleted, modified, acquired, or shut down.
+
+Filecoin's perpetual-storage mechanism means a user funds a one-time
+endowment and a smart contract keeps renewing the storage deal indefinitely —
+no subscription, no company decision to reverse. Proof of Data Possession
+means the integrity of stored context is mathematically verifiable, not just
+claimed. And programmable access control via the Filecoin Virtual Machine
+means the user's permissions aren't a policy someone could quietly change —
+they're code running on a public network.
 
 ## Bugs this testing process actually found and fixed
 

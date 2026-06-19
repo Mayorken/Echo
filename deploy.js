@@ -1,8 +1,9 @@
 /**
  * deploy.js
  *
- * Deploys EchoMemoryRegistry to Filecoin's FEVM Calibration testnet.
- * Run with: node deploy.js
+ * Deploys the EchoMemoryRegistry contract (the on-chain piece of Echo's
+ * universal AI context portability layer) to Filecoin's FEVM Calibration
+ * testnet. Run with: node deploy.js
  *
  * Requires a funded Calibration-net wallet. Get test FIL from the
  * Calibration faucet, then set PRIVATE_KEY below via an environment
