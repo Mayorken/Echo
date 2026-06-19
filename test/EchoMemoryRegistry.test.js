@@ -1,7 +1,6 @@
 const { expect } = require('chai');
-const ganache = require('ganache');
 const { ethers } = require('ethers');
-const { compileAll } = require('../compile-helper');
+const { compileAll, deployContract, createGanacheProvider } = require('./test-helpers');
 const { expectRevertedWithCustomError, expectEmit } = require('./assertions');
 
 describe('EchoMemoryRegistry (running on a local in-process chain)', function () {
@@ -11,8 +10,7 @@ describe('EchoMemoryRegistry (running on a local in-process chain)', function ()
 
   before(async function () {
     contracts = compileAll();
-    const ganacheProvider = ganache.provider({ logging: { quiet: true } });
-    provider = new ethers.BrowserProvider(ganacheProvider, undefined, { cacheTimeout: -1 });
+    provider = createGanacheProvider();
     const accounts = await provider.listAccounts();
     [owner, appA, appB, stranger] = await Promise.all(
       accounts.slice(0, 4).map((a) => provider.getSigner(a.address))
@@ -20,13 +18,7 @@ describe('EchoMemoryRegistry (running on a local in-process chain)', function ()
   });
 
   beforeEach(async function () {
-    const factory = new ethers.ContractFactory(
-      contracts.EchoMemoryRegistry.abi,
-      contracts.EchoMemoryRegistry.bytecode,
-      owner
-    );
-    registry = await factory.deploy();
-    await registry.waitForDeployment();
+    registry = await deployContract(contracts.EchoMemoryRegistry, owner);
   });
 
   const cid = 'bafybeig6xv5nj9q4z2p7h3m8w1kexamplecid';
@@ -175,6 +167,8 @@ describe('EchoMemoryRegistry (running on a local in-process chain)', function ()
       );
       const attacker = await attackerFactory.deploy(await registry.getAddress());
       await attacker.waitForDeployment();
+      // Note: deployContract() is not used here because the attacker
+      // constructor takes a target address argument.
 
       await attacker.fund({ value: ethers.parseEther('1.0') });
       expect(await registry.renewalBalanceOf(await attacker.getAddress())).to.equal(

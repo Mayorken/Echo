@@ -654,6 +654,7 @@ var state = {
 };
 
 function $id(id){ return document.getElementById(id); }
+function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 var messages = $id('messages');
 var typing   = $id('typing');
 var qrs      = $id('qrs');
@@ -748,7 +749,7 @@ function setAI(key){
   $id('chatName').style.color = ai.color;
   $id('chatStatus').textContent = 'reading your Echo context...';
   ['codex','claude','gemini'].forEach(function(k){
-    var tab = $id('tab'+k.charAt(0).toUpperCase()+k.slice(1));
+    var tab = $id('tab'+cap(k));
     if(tab) tab.classList.toggle('active', k===key);
   });
 }
@@ -788,10 +789,11 @@ function switchTo(key, done){
 
 // ── REVOKE HANDLERS ──
 function revokeAI(key){
-  $id('row'+key.charAt(0).toUpperCase()+key.slice(1)).classList.add('revoked');
-  var led=$id('led'+key.charAt(0).toUpperCase()+key.slice(1));
+  var Cap=cap(key);
+  $id('row'+Cap).classList.add('revoked');
+  var led=$id('led'+Cap);
   led.style.background='#333'; led.style.boxShadow='none';
-  var btn=$id('rev'+key.charAt(0).toUpperCase()+key.slice(1));
+  var btn=$id('rev'+Cap);
   btn.disabled=true; btn.textContent='revoked';
   var sub=$id(key+'Sub');
   if(sub) sub.textContent='access revoked';

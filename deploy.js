@@ -10,9 +10,7 @@
  */
 
 const { ethers } = require('ethers');
-const fs = require('fs');
-const path = require('path');
-const solc = require('solc');
+const { compileRegistry, deployContract } = require('./compile-helper');
 
 const CALIBRATION_RPC = 'https://api.calibration.node.glif.io/rpc/v1';
 
@@ -22,23 +20,13 @@ async function main() {
     throw new Error('Set PRIVATE_KEY env var to a funded Calibration testnet wallet key');
   }
 
-  // Compile fresh so the deployed bytecode always matches the current source.
-  const source = fs.readFileSync(path.join(__dirname, 'contracts', 'EchoMemoryRegistry.sol'), 'utf8');
-  const input = {
-    language: 'Solidity',
-    sources: { 'EchoMemoryRegistry.sol': { content: source } },
-    settings: { evmVersion: 'london', outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object'] } } },
-  };
-  const output = JSON.parse(solc.compile(JSON.stringify(input)));
-  const compiled = output.contracts['EchoMemoryRegistry.sol']['EchoMemoryRegistry'];
+  const { contract: compiled } = compileRegistry();
 
   const provider = new ethers.JsonRpcProvider(CALIBRATION_RPC);
   const wallet = new ethers.Wallet(privateKey, provider);
 
-  const factory = new ethers.ContractFactory(compiled.abi, compiled.evm.bytecode.object, wallet);
   console.log('Deploying EchoMemoryRegistry to Filecoin Calibration testnet...');
-  const contract = await factory.deploy();
-  await contract.waitForDeployment();
+  const contract = await deployContract(compiled, wallet);
 
   console.log('Deployed at:', await contract.getAddress());
   console.log('Save this address — the SDK and prototype both need it.');
