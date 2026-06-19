@@ -79,7 +79,12 @@ they authorize.
   encryption, a real deployed contract, an in-memory stand-in for the
   Filecoin storage adapter. Covers the full save → grant → load flow, wrong
   decryption keys, revoked access, and renewal funding.
-- **`deploy.js`** — deploys to Filecoin's Calibration testnet.
+- **`keeper/`** — auto-renewal keeper bot. `scanner.js` finds funded vaults
+  via contract events, `renewer.js` checks deal status and re-pins via
+  Lighthouse, `index.js` orchestrates periodic sweeps. `keeper.js` is the
+  CLI entry point.
+- **`deploy.js`** — deploys implementation + ERC1967 proxy to Filecoin's
+  Calibration testnet.
 - **`compile.js`** / **`compile-helper.js`** — compile the contract(s) and
   produce the ABI (`EchoMemoryRegistry.abi.json`, already generated).
 
@@ -149,12 +154,45 @@ proxy.upgradeToAndCall(newImplAddress, '0x')
 The test suite exercises the full V1→V2 upgrade cycle: deploy V1 behind proxy,
 write data, upgrade to V2, verify all storage is intact and `version()` returns 2.
 
-## What's intentionally still stubbed out
+## Auto-renewal keeper bot
 
-- **Auto-renewal keeper.** `fundRenewal()` holds a real FIL balance per user,
-  but nothing yet actually renews a storage deal from it. That needs either
-  an off-chain keeper bot (faster to ship) or a dedicated FVM actor (closer
-  to the actual pitch).
+The keeper monitors funded vaults and automatically re-pins context whose
+Filecoin storage deal is expiring or missing.
+
+```bash
+# One-time sweep:
+RPC_URL=https://api.calibration.node.glif.io/rpc/v1 \
+CONTRACT_ADDRESS=0x... \
+LIGHTHOUSE_API_KEY=your-key \
+node keeper.js --once
+
+# Long-running daemon (sweeps every hour by default):
+node keeper.js
+```
+
+**How it works:**
+1. `keeper/scanner.js` scans `MemoryUpdated` events to find vaults with both
+   a CID and a non-zero `renewalBalance`
+2. `keeper/renewer.js` checks each CID's Filecoin deal status via
+   `lighthouse.dealStatus` — classifies as `active`, `expiring`, or `no-deal`
+3. For expiring or missing deals, it re-pins by fetching the data from the
+   IPFS gateway and re-uploading via `lighthouse.uploadBuffer`
+
+**Environment variables:**
+
+| Variable | Required | Description |
+|---|---|---|
+| `RPC_URL` | Yes | FEVM RPC endpoint |
+| `CONTRACT_ADDRESS` | Yes | EchoMemoryRegistry proxy address |
+| `LIGHTHOUSE_API_KEY` | Yes | Lighthouse API key for re-pinning |
+| `KEEPER_INTERVAL_MS` | No | Sweep interval in ms (default: 3600000 = 1 hour) |
+| `KEEPER_FROM_BLOCK` | No | Block to start scanning from (default: 0) |
+| `KEEPER_GATEWAY` | No | Custom IPFS gateway URL |
+
+**Current limitation:** the keeper operator pays for re-pinning via their
+Lighthouse API key. The on-chain `renewalBalance` tracks the user's funding
+commitment but isn't deducted automatically — that requires a contract upgrade
+to add a keeper-authorized spend path (planned).
 
 ## Using real Filecoin storage (Lighthouse)
 
@@ -196,9 +234,11 @@ npm test          # 18 tests, real local chain, no network needed
    **Done** — `lib/storage.js` uses Lighthouse.
 2. ~~Add an upgradability pattern (UUPS proxy).~~
    **Done** — contract is now UUPS-upgradeable via OpenZeppelin v5.
-3. Decide on the renewal-keeper approach (off-chain bot vs. FVM actor) and
-   build it — right now the endowment is funded but inert.
+3. ~~Build the auto-renewal keeper.~~
+   **Done** — `keeper/` monitors funded vaults and re-pins expiring CIDs via Lighthouse.
 4. Get a real audit before this touches real user data or real FIL at scale
    — this scaffold is tested for correctness, not reviewed for security.
 5. Build the first real AI platform integration (e.g. a ChatGPT / Claude
    plugin that reads and writes Echo context).
+6. Add a keeper-authorized spend path to the contract so the keeper can
+   deduct re-pinning costs from each vault's `renewalBalance` automatically.
