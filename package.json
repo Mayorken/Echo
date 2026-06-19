@@ -6,6 +6,8 @@
   "scripts": {
     "compile": "node compile.js",
     "deploy": "node deploy.js",
+    "keeper": "node keeper.js",
+    "keeper:once": "node keeper.js --once",
     "test": "mocha test/*.test.js"
   },
   "license": "MIT",
