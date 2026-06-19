@@ -14,7 +14,7 @@
  */
 
 const { ethers } = require('ethers');
-const { compileAll, compileProxy } = require('./compile-helper');
+const { compileAll, compileProxy, deployContract } = require('./compile-helper');
 
 const CALIBRATION_RPC = 'https://api.calibration.node.glif.io/rpc/v1';
 
@@ -32,13 +32,7 @@ async function main() {
 
   // 1. Deploy the implementation contract
   console.log('Deploying EchoMemoryRegistry implementation...');
-  const implFactory = new ethers.ContractFactory(
-    contracts.EchoMemoryRegistry.abi,
-    contracts.EchoMemoryRegistry.bytecode,
-    wallet
-  );
-  const impl = await implFactory.deploy();
-  await impl.waitForDeployment();
+  const impl = await deployContract(contracts.EchoMemoryRegistry, wallet);
   const implAddress = await impl.getAddress();
   console.log('Implementation deployed at:', implAddress);
 

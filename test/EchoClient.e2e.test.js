@@ -1,32 +1,8 @@
 const { expect } = require('chai');
-const ganache = require('ganache');
 const { ethers } = require('ethers');
-const { compileAll } = require('../compile-helper');
+const { compileAll, deployContract, makeFakeStorage, createGanacheServer, closeServerWithTimeout } = require('./test-helpers');
 const { EchoClient, generateEncryptionKey } = require('../echo-sdk');
 const { deployProxy } = require('./proxy-helper');
-
-/**
- * A minimal in-memory stand-in for a real Filecoin storage adapter (Synapse
- * SDK / web3.storage / Lighthouse). Implements the same put(bytes)->cid and
- * get(cid)->bytes contract the real EchoClient expects, so this test
- * exercises the actual save/load code path end-to-end without needing
- * network access to a live storage gateway.
- */
-function makeFakeStorage() {
-  const blobs = new Map();
-  let counter = 0;
-  return {
-    async put(bytes) {
-      const cid = `fakecid${counter++}`;
-      blobs.set(cid, bytes);
-      return cid;
-    },
-    async get(cid) {
-      if (!blobs.has(cid)) throw new Error('not found: ' + cid);
-      return blobs.get(cid);
-    },
-  };
-}
 
 describe('EchoClient (end-to-end: real encryption + real contract + fake storage)', function () {
   this.timeout(30000);
@@ -38,13 +14,6 @@ describe('EchoClient (end-to-end: real encryption + real contract + fake storage
     contracts = compileAll();
   });
 
-  function closeServerWithTimeout(server, ms = 2000) {
-    return Promise.race([
-      new Promise((resolve) => server.close(resolve)),
-      new Promise((resolve) => setTimeout(resolve, ms)),
-    ]);
-  }
-
   /**
    * Spins up a dedicated ganache HTTP server + fresh contract deployment for
    * a single test, and returns everything needed plus a teardown function.
@@ -53,15 +22,8 @@ describe('EchoClient (end-to-end: real encryption + real contract + fake storage
    */
   async function setupTestEnv() {
     const thisPort = port++;
-    const server = ganache.server({ logging: { quiet: true } });
-    await new Promise((resolve, reject) => {
-      server.listen(thisPort, (err) => (err ? reject(err) : resolve()));
-    });
-    const rpcUrl = `http://127.0.0.1:${thisPort}`;
-
-    const setupProvider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
-    const privateKeys = server.provider.getInitialAccounts();
-    const [ownerKey, appAKey, strangerKey] = Object.values(privateKeys).map((a) => a.secretKey);
+    const { server, rpcUrl, provider: setupProvider, keys } = await createGanacheServer(thisPort);
+    const [ownerKey, appAKey, strangerKey] = keys;
 
     const ownerWallet = new ethers.Wallet(ownerKey, setupProvider);
     const appAWallet = new ethers.Wallet(appAKey, setupProvider);

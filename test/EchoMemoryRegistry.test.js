@@ -1,7 +1,6 @@
 const { expect } = require('chai');
-const ganache = require('ganache');
 const { ethers } = require('ethers');
-const { compileAll } = require('../compile-helper');
+const { compileAll, deployContract, createGanacheProvider } = require('./test-helpers');
 const { expectRevertedWithCustomError, expectEmit } = require('./assertions');
 const { deployProxy } = require('./proxy-helper');
 
@@ -12,8 +11,7 @@ describe('EchoMemoryRegistry (running on a local in-process chain)', function ()
 
   before(async function () {
     contracts = compileAll();
-    const ganacheProvider = ganache.provider({ logging: { quiet: true } });
-    provider = new ethers.BrowserProvider(ganacheProvider, undefined, { cacheTimeout: -1 });
+    provider = createGanacheProvider();
     const accounts = await provider.listAccounts();
     [owner, appA, appB, stranger] = await Promise.all(
       accounts.slice(0, 4).map((a) => provider.getSigner(a.address))
