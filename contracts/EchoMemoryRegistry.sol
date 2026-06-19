@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+
 /**
  * @title EchoMemoryRegistry
  * @notice Universal AI context portability layer, built for deployment on the
- *         Filecoin EVM (FEVM).
+ *         Filecoin EVM (FEVM). Deployed behind an ERC1967 proxy so the
+ *         contract can be upgraded without migrating users or AI tool
+ *         integrations to a new address.
  *
  *         The actual context (project knowledge, preferences, architectural
  *         decisions accumulated across AI tools) never lives on-chain. It's
@@ -12,19 +19,18 @@ pragma solidity ^0.8.24;
  *         this contract only holds a pointer (the CID) to that data plus the
  *         access-control logic that decides which AI tools are allowed to
  *         read it.
- *
- *         This is a starter scaffold, not an audited production contract.
- *         Before mainnet deployment you'd want: a re-entrancy guard on the
- *         payable functions, an upgradability pattern (UUPS/Transparent proxy),
- *         and a proper access-control library instead of the hand-rolled
- *         checks below.
  */
-contract EchoMemoryRegistry {
+contract EchoMemoryRegistry is
+    Initializable,
+    UUPSUpgradeable,
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable
+{
     /// @notice One context vault per user wallet.
     struct MemoryVault {
-        string cid;          // Current Filecoin/IPFS CID of the encrypted context blob
-        bytes32 integrityHash; // Hash of the plaintext, checked client-side after decrypt
-        uint64 updatedAt;    // Block timestamp of last write
+        string cid;             // Current Filecoin/IPFS CID of the encrypted context blob
+        bytes32 integrityHash;  // Hash of the plaintext, checked client-side after decrypt
+        uint64 updatedAt;       // Block timestamp of last write
         uint256 renewalBalance; // FIL held to fund perpetual storage renewal
     }
 
@@ -36,18 +42,6 @@ contract EchoMemoryRegistry {
 
     /// @dev user => list of AI tool addresses ever granted access (for enumeration in UIs)
     mapping(address => address[]) private grantedAppsHistory;
-
-    /// @dev Re-entrancy guard state, hand-rolled to avoid an external dependency.
-    uint256 private constant NOT_ENTERED = 1;
-    uint256 private constant ENTERED = 2;
-    uint256 private reentrancyStatus = NOT_ENTERED;
-
-    modifier nonReentrant() {
-        require(reentrancyStatus != ENTERED, "ReentrancyGuard: reentrant call");
-        reentrancyStatus = ENTERED;
-        _;
-        reentrancyStatus = NOT_ENTERED;
-    }
 
     event MemoryUpdated(address indexed user, string cid, bytes32 integrityHash, uint64 updatedAt);
     event AccessGranted(address indexed user, address indexed app);
@@ -62,6 +56,23 @@ contract EchoMemoryRegistry {
     modifier onlySelfOrGrantedApp(address user) {
         if (msg.sender != user && !accessList[user][msg.sender]) revert NotAuthorized();
         _;
+    }
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    /**
+     * @notice Initialize the proxy instance. Called once at deploy time via
+     *         the ERC1967Proxy constructor's _data argument.
+     * @param initialOwner The address that will own the contract and be
+     *        authorized to perform upgrades.
+     */
+    function initialize(address initialOwner) public initializer {
+        __Ownable_init(initialOwner);
+        __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
     }
 
     /**
@@ -127,7 +138,7 @@ contract EchoMemoryRegistry {
      *         renewal for this vault, mirroring Filecoin's perpetual-storage
      *         actor pattern: as long as the balance is funded, an off-chain
      *         keeper (or, longer-term, an FVM actor) keeps renewing the deal
-     *         so the memory file never expires.
+     *         so the context file never expires.
      */
     function fundRenewal() external payable {
         MemoryVault storage vault = vaults[msg.sender];
@@ -154,4 +165,7 @@ contract EchoMemoryRegistry {
     function appAccessHistory(address user) external view returns (address[] memory) {
         return grantedAppsHistory[user];
     }
+
+    /// @dev Only the contract owner can authorize an upgrade to a new implementation.
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 }

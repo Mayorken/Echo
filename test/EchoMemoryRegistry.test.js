@@ -3,6 +3,7 @@ const ganache = require('ganache');
 const { ethers } = require('ethers');
 const { compileAll } = require('../compile-helper');
 const { expectRevertedWithCustomError, expectEmit } = require('./assertions');
+const { deployProxy } = require('./proxy-helper');
 
 describe('EchoMemoryRegistry (running on a local in-process chain)', function () {
   this.timeout(30000);
@@ -20,17 +21,27 @@ describe('EchoMemoryRegistry (running on a local in-process chain)', function ()
   });
 
   beforeEach(async function () {
-    const factory = new ethers.ContractFactory(
-      contracts.EchoMemoryRegistry.abi,
-      contracts.EchoMemoryRegistry.bytecode,
-      owner
-    );
-    registry = await factory.deploy();
-    await registry.waitForDeployment();
+    registry = await deployProxy(contracts.EchoMemoryRegistry, owner);
   });
 
   const cid = 'bafybeig6xv5nj9q4z2p7h3m8w1kexamplecid';
   const integrityHash = ethers.keccak256(ethers.toUtf8Bytes('hello memory'));
+
+  describe('proxy setup', function () {
+    it('sets the deployer as owner', async function () {
+      expect(await registry.owner()).to.equal(owner.address);
+    });
+
+    it('cannot be initialized again', async function () {
+      let threw = false;
+      try {
+        await registry.initialize(stranger.address);
+      } catch (err) {
+        threw = true;
+      }
+      expect(threw).to.equal(true);
+    });
+  });
 
   describe('memory writes', function () {
     it('stores a memory pointer and emits MemoryUpdated', async function () {

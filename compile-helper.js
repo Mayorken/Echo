@@ -3,6 +3,22 @@ const fs = require('fs');
 const path = require('path');
 
 /**
+ * Resolve Solidity import paths, including @openzeppelin/* from node_modules.
+ */
+function findImports(importPath) {
+  const candidates = [
+    path.join(__dirname, 'node_modules', importPath),
+    path.join(__dirname, 'contracts', importPath),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return { contents: fs.readFileSync(candidate, 'utf8') };
+    }
+  }
+  return { error: `File not found: ${importPath}` };
+}
+
+/**
  * Compiles both the main contract and the test-only attacker helper,
  * returning { abi, bytecode } for each. Used by compile.js (production)
  * and by the test suite (local-chain testing) so there's only one
@@ -19,6 +35,12 @@ function compileAll() {
         'utf8'
       ),
     },
+    'EchoMemoryRegistryV2.sol': {
+      content: fs.readFileSync(
+        path.join(__dirname, 'contracts', 'EchoMemoryRegistryV2.sol'),
+        'utf8'
+      ),
+    },
   };
 
   const input = {
@@ -30,7 +52,7 @@ function compileAll() {
     },
   };
 
-  const output = JSON.parse(solc.compile(JSON.stringify(input)));
+  const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImports }));
 
   if (output.errors) {
     const fatal = output.errors.filter((e) => e.severity === 'error');
@@ -42,11 +64,55 @@ function compileAll() {
 
   const registry = output.contracts['EchoMemoryRegistry.sol']['EchoMemoryRegistry'];
   const attacker = output.contracts['ReentrancyAttacker.sol']['ReentrancyAttacker'];
+  const registryV2 = output.contracts['EchoMemoryRegistryV2.sol']['EchoMemoryRegistryV2'];
 
-  return {
+  const result = {
     EchoMemoryRegistry: { abi: registry.abi, bytecode: '0x' + registry.evm.bytecode.object },
     ReentrancyAttacker: { abi: attacker.abi, bytecode: '0x' + attacker.evm.bytecode.object },
   };
+
+  if (registryV2) {
+    result.EchoMemoryRegistryV2 = { abi: registryV2.abi, bytecode: '0x' + registryV2.evm.bytecode.object };
+  }
+
+  return result;
 }
 
-module.exports = { compileAll };
+/**
+ * Compile just the ERC1967Proxy from OpenZeppelin for proxy deployment.
+ * Uses a small wrapper source so relative OZ imports resolve correctly.
+ */
+function compileProxy() {
+  const wrapperSource = `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";`;
+
+  const sources = {
+    'ProxyWrapper.sol': { content: wrapperSource },
+  };
+
+  const input = {
+    language: 'Solidity',
+    sources,
+    settings: {
+      evmVersion: 'london',
+      outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object'] } },
+    },
+  };
+
+  const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImports }));
+
+  if (output.errors) {
+    const fatal = output.errors.filter((e) => e.severity === 'error');
+    if (fatal.length) {
+      fatal.forEach((e) => console.error(e.formattedMessage));
+      throw new Error('Proxy compilation failed');
+    }
+  }
+
+  const proxyKey = '@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol';
+  const proxy = output.contracts[proxyKey]['ERC1967Proxy'];
+  return { abi: proxy.abi, bytecode: '0x' + proxy.evm.bytecode.object };
+}
+
+module.exports = { compileAll, compileProxy };

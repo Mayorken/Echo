@@ -50,10 +50,13 @@ they authorize.
 
 ## What's in here
 
-- **`contracts/EchoMemoryRegistry.sol`** — the on-chain piece. Holds a pointer
-  (CID) to each user's encrypted context file, the access-control logic
-  deciding which AI tools can read it, a FIL renewal endowment per user, and a
-  re-entrancy guard on the function that pays FIL out.
+- **`contracts/EchoMemoryRegistry.sol`** — the on-chain piece. UUPS-upgradeable
+  (via OpenZeppelin), deployed behind an ERC1967 proxy. Holds a pointer (CID)
+  to each user's encrypted context file, the access-control logic deciding
+  which AI tools can read it, a FIL renewal endowment per user, and OZ's
+  `ReentrancyGuardUpgradeable` on the withdrawal function.
+- **`contracts/EchoMemoryRegistryV2.sol`** — example upgrade target that adds a
+  `version()` getter. Used by the test suite to prove the upgrade flow works.
 - **`echo-sdk.js`** — the client library an AI tool integrates: `saveMemory`,
   `loadMemory`, `grantAccess`, `revokeAccess`, `fundRenewal`. Uses real
   AES-256-GCM encryption (`lib/crypto.js`) and wraps the signer in an
@@ -61,16 +64,13 @@ they authorize.
 - **`lib/crypto.js`** — real AES-256-GCM: Web Crypto API in-browser (where
   this actually runs), Node's `crypto` module as a fallback so the file is
   testable directly in Node.
-<<<<<<< HEAD
-- **`index.html`** — an interactive demo showing a developer switching between
-  Codex, Claude, and Gemini mid-project with zero context loss — the core
-  portability scenario in action.
-=======
 - **`lib/storage.js`** — Lighthouse storage adapter. Implements the
   `put(bytes)->cid` / `get(cid)->bytes` interface EchoClient expects, backed
   by real Filecoin storage via [Lighthouse](https://lighthouse.storage).
   Upload via `uploadBuffer`, retrieval via IPFS gateway.
->>>>>>> 43876f9 (Add Lighthouse storage adapter for real Filecoin storage)
+- **`index.html`** — an interactive demo showing a developer switching between
+  Codex, Claude, and Gemini mid-project with zero context loss — the core
+  portability scenario in action.
 - **`test/EchoMemoryRegistry.test.js`** — 13 tests against the raw contract on
   a local in-memory chain, including a test that deploys an actual malicious
   contract and tries to exploit re-entrancy, to prove the guard works rather
@@ -83,7 +83,7 @@ they authorize.
 - **`compile.js`** / **`compile-helper.js`** — compile the contract(s) and
   produce the ABI (`EchoMemoryRegistry.abi.json`, already generated).
 
-Run `npm test` yourself — 18 tests, all passing, no network access required.
+Run `npm test` yourself — all tests passing, no network access required.
 
 ## How the pitch maps to the code
 
@@ -125,6 +125,30 @@ Worth knowing about, since they'd bite a real deployment too:
   short-lived read cache (`cacheTimeout: -1`). If you ever see a transaction
   "hang forever" against a fast-mining chain, this is usually why.
 
+## Contract upgradability (UUPS)
+
+The contract is deployed behind an ERC1967 proxy using the UUPS pattern
+(OpenZeppelin v5). This means:
+
+- The **proxy address is permanent** — AI tools integrate against it and never
+  need to change their contract address when the implementation is upgraded.
+- **Only the owner** (set at deploy time via `initialize()`) can authorize an
+  upgrade by calling `upgradeToAndCall(newImpl, data)`.
+- **All user data is preserved** across upgrades — vaults, access lists,
+  renewal balances, and granted-app history all live in proxy storage.
+
+To upgrade in production:
+```bash
+# 1. Deploy the new implementation
+node -e "const {ethers}=require('ethers'); const {compileAll}=require('./compile-helper'); ..."
+
+# 2. Call upgradeToAndCall on the proxy (from the owner wallet)
+proxy.upgradeToAndCall(newImplAddress, '0x')
+```
+
+The test suite exercises the full V1→V2 upgrade cycle: deploy V1 behind proxy,
+write data, upgrade to V2, verify all storage is intact and `version()` returns 2.
+
 ## What's intentionally still stubbed out
 
 - **Auto-renewal keeper.** `fundRenewal()` holds a real FIL balance per user,
@@ -163,8 +187,8 @@ npm test          # 18 tests, real local chain, no network needed
 1. Get a wallet funded with test FIL from the Calibration faucet.
 2. `export PRIVATE_KEY=0x...` (never commit a real key).
 3. `npm run deploy`
-4. Copy the printed contract address into wherever `echo-sdk.js` gets
-   instantiated.
+4. The script deploys the implementation + ERC1967 proxy and prints both
+   addresses. Use the **proxy address** when instantiating `EchoClient`.
 
 ## Suggested next steps for a real build
 
@@ -178,11 +202,10 @@ npm test          # 18 tests, real local chain, no network needed
 =======
 1. ~~Wire the `storage` adapter to an actual Filecoin upload/retrieval SDK.~~
    **Done** — `lib/storage.js` uses Lighthouse.
-2. Decide on the renewal-keeper approach (off-chain bot vs. FVM actor) and
+2. ~~Add an upgradability pattern (UUPS proxy).~~
+   **Done** — contract is now UUPS-upgradeable via OpenZeppelin v5.
+3. Decide on the renewal-keeper approach (off-chain bot vs. FVM actor) and
    build it — right now the endowment is funded but inert.
-3. Add an upgradability pattern (UUPS proxy is the common choice) before any
-   mainnet deployment, so the contract can evolve without forcing every
-   integrated tool to migrate to a new address.
 4. Get a real audit before this touches real user data or real FIL at scale
    — this scaffold is tested for correctness, not reviewed for security.
 5. Build the first real AI platform integration (e.g. a ChatGPT / Claude
