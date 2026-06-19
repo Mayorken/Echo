@@ -83,33 +83,33 @@ describe('EchoClient (end-to-end: real encryption + real contract + fake storage
     return { rpcUrl, registryAddress, ownerWallet, appAWallet, strangerWallet, teardown };
   }
 
-  it('writes memory, grants an app access, and that app can load + decrypt it', async function () {
+  it('writes context, grants an AI tool access, and that tool can load + decrypt it', async function () {
     const { rpcUrl, registryAddress, ownerWallet, appAWallet, teardown } = await setupTestEnv();
     try {
       const storage = makeFakeStorage();
       const key = await generateEncryptionKey();
 
       const ownerClient = new EchoClient(rpcUrl, registryAddress, ownerWallet, storage);
-      const memory = { facts: ['Chem exam: Friday', 'Hates cilantro'], lastTopic: 'finals stress' };
-      await ownerClient.saveMemory(memory, key);
+      const context = { stack: ['Go 1.22', 'PostgreSQL', 'Docker'], archDecision: 'AES-256-GCM for doc encryption', currentTask: 'listing endpoint' };
+      await ownerClient.saveMemory(context, key);
       await ownerClient.grantAccess(appAWallet.address);
 
       const appClient = new EchoClient(rpcUrl, registryAddress, appAWallet, storage);
       const loaded = await appClient.loadMemory(ownerWallet.address, key);
 
-      expect(loaded).to.deep.equal(memory);
+      expect(loaded).to.deep.equal(context);
     } finally {
       await teardown();
     }
   });
 
-  it('blocks a non-granted app from loading memory at all (fails before decryption is even relevant)', async function () {
+  it('blocks a non-granted AI tool from loading context (fails before decryption is even relevant)', async function () {
     const { rpcUrl, registryAddress, ownerWallet, strangerWallet, teardown } = await setupTestEnv();
     try {
       const storage = makeFakeStorage();
       const key = await generateEncryptionKey();
       const ownerClient = new EchoClient(rpcUrl, registryAddress, ownerWallet, storage);
-      await ownerClient.saveMemory({ fact: 'should stay private' }, key);
+      await ownerClient.saveMemory({ archDecision: 'should stay private to authorized tools' }, key);
 
       const strangerClient = new EchoClient(rpcUrl, registryAddress, strangerWallet, storage);
       let threw = false;
@@ -132,7 +132,7 @@ describe('EchoClient (end-to-end: real encryption + real contract + fake storage
       const wrongKey = await generateEncryptionKey();
 
       const ownerClient = new EchoClient(rpcUrl, registryAddress, ownerWallet, storage);
-      await ownerClient.saveMemory({ fact: 'only readable with the right key' }, rightKey);
+      await ownerClient.saveMemory({ preference: 'only readable with the right key' }, rightKey);
       await ownerClient.grantAccess(appAWallet.address);
 
       const appClient = new EchoClient(rpcUrl, registryAddress, appAWallet, storage);
@@ -154,12 +154,12 @@ describe('EchoClient (end-to-end: real encryption + real contract + fake storage
       const storage = makeFakeStorage();
       const key = await generateEncryptionKey();
       const ownerClient = new EchoClient(rpcUrl, registryAddress, ownerWallet, storage);
-      await ownerClient.saveMemory({ fact: 'temporary access' }, key);
+      await ownerClient.saveMemory({ preference: 'temporary access to project context' }, key);
       await ownerClient.grantAccess(appAWallet.address);
 
       const appClient = new EchoClient(rpcUrl, registryAddress, appAWallet, storage);
       const firstLoad = await appClient.loadMemory(ownerWallet.address, key);
-      expect(firstLoad.fact).to.equal('temporary access');
+      expect(firstLoad.preference).to.equal('temporary access to project context');
 
       await ownerClient.revokeAccess(appAWallet.address);
 

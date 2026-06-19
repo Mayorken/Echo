@@ -1,18 +1,18 @@
 /**
  * echo-sdk.js
  *
- * Minimal client SDK an AI companion app would integrate to read and write
- * a user's portable Echo memory. Two things happen on every write:
+ * Client SDK any AI tool integrates to read and write a user's portable
+ * Echo context. Two things happen on every write:
  *
- *   1. The memory content is encrypted client-side and uploaded to Filecoin
+ *   1. The context is encrypted client-side and uploaded to Filecoin
  *      (via a storage gateway like web3.storage / Lighthouse / Synapse SDK),
  *      which returns a CID.
  *   2. That CID + an integrity hash get written to the EchoMemoryRegistry
  *      contract on FEVM, scoped to the user's wallet.
  *
  * Reading is the mirror image: fetch the CID + hash from the contract (only
- * works if the calling app has been granted access), pull the encrypted blob
- * from Filecoin, decrypt client-side, and verify it against the hash.
+ * works if the calling AI tool has been granted access), pull the encrypted
+ * blob from Filecoin, decrypt client-side, and verify it against the hash.
  *
  * This file is a working scaffold against the real ABI generated from
  * EchoMemoryRegistry.sol — swap in a deployed contract address and an
@@ -28,10 +28,10 @@ class EchoClient {
    * @param {string} rpcUrl FEVM RPC endpoint, e.g. Filecoin Calibration testnet
    * @param {string} contractAddress Deployed EchoMemoryRegistry address
    * @param {ethers.Signer} signer The end user's wallet signer (e.g. from a
-   *        browser wallet), or the AI app's own signer when reading on the
+   *        browser wallet), or the AI tool's own signer when reading on the
    *        user's behalf with granted access.
    * @param {object} storage An adapter exposing put(bytes) -> cid and get(cid) -> bytes,
-   *        backed by whichever Filecoin storage gateway the app uses.
+   *        backed by whichever Filecoin storage gateway the tool uses.
    */
   constructor(rpcUrl, contractAddress, signer, storage) {
     // Wrapping in a NonceManager avoids a real race we hit during testing:
@@ -51,8 +51,8 @@ class EchoClient {
   }
 
   /**
-   * Save the latest memory snapshot for the connected user.
-   * @param {object} memoryObject Plain JS object: facts, conversation summary, etc.
+   * Save the latest context snapshot for the connected user.
+   * @param {object} memoryObject Plain JS object: project context, preferences, decisions, etc.
    * @param {Uint8Array} encryptionKey 32-byte symmetric key controlled by the
    *        user — generate one with generateEncryptionKey(). Never sent on-chain.
    */
@@ -69,8 +69,8 @@ class EchoClient {
   }
 
   /**
-   * Read another (or your own) user's memory, decrypt, and verify integrity.
-   * Will revert on-chain if the calling signer hasn't been granted access.
+   * Read another (or your own) user's context, decrypt, and verify integrity.
+   * Will revert on-chain if the calling AI tool hasn't been granted access.
    * @param {string} userAddress
    * @param {Uint8Array} decryptionKey the same 32-byte key used in saveMemory
    */
@@ -88,13 +88,13 @@ class EchoClient {
     return JSON.parse(new TextDecoder().decode(plaintext));
   }
 
-  /** Grant a new AI app (by its contract/wallet address) read access to your memory. */
+  /** Grant a new AI tool (by its contract/wallet address) read access to your context. */
   async grantAccess(appAddress) {
     const tx = await this.contract.grantAccess(appAddress);
     return tx.wait();
   }
 
-  /** Revoke a previously granted app's access — used when a user "leaves" an app. */
+  /** Revoke a previously granted tool's access — the user controls who reads their context. */
   async revokeAccess(appAddress) {
     const tx = await this.contract.revokeAccess(appAddress);
     return tx.wait();
@@ -106,7 +106,7 @@ class EchoClient {
     return tx.wait();
   }
 
-  /** List every app ever granted access, with their current (live) status. */
+  /** List every AI tool ever granted access, with their current (live) status. */
   async listAccess(userAddress) {
     const history = await this.contract.appAccessHistory(userAddress);
     const withStatus = await Promise.all(
