@@ -34,6 +34,16 @@ class EchoClient {
    *        backed by whichever Filecoin storage gateway the tool uses.
    */
   constructor(rpcUrl, contractAddress, signer, storage) {
+    if (!rpcUrl || typeof rpcUrl !== 'string') {
+      throw new Error('EchoClient: rpcUrl must be a non-empty string');
+    }
+    if (!contractAddress || typeof contractAddress !== 'string') {
+      throw new Error('EchoClient: contractAddress must be a non-empty string');
+    }
+    if (!storage || typeof storage.put !== 'function' || typeof storage.get !== 'function') {
+      throw new Error('EchoClient: storage must implement put(bytes) and get(cid)');
+    }
+
     // Wrapping in a NonceManager avoids a real race we hit during testing:
     // providers can serve a momentarily stale "pending" nonce when several
     // transactions are sent back-to-back from the same address (e.g. save,
@@ -57,14 +67,38 @@ class EchoClient {
    *        user — generate one with generateEncryptionKey(). Never sent on-chain.
    */
   async saveMemory(memoryObject, encryptionKey) {
-    const plaintext = new TextEncoder().encode(JSON.stringify(memoryObject));
+    if (memoryObject == null) {
+      throw new Error('saveMemory: memoryObject must not be null or undefined');
+    }
+    if (!(encryptionKey instanceof Uint8Array) || encryptionKey.length !== 32) {
+      throw new Error('saveMemory: encryptionKey must be a 32-byte Uint8Array');
+    }
+
+    let plaintext;
+    try {
+      plaintext = new TextEncoder().encode(JSON.stringify(memoryObject));
+    } catch (err) {
+      throw new Error(`saveMemory: failed to serialize memoryObject: ${err.message}`);
+    }
+
     const integrityHash = ethers.keccak256(plaintext);
 
     const encrypted = await encrypt(plaintext, encryptionKey);
-    const cid = await this.storage.put(encrypted);
 
-    const tx = await this.contract.updateMemory(cid, integrityHash);
-    await tx.wait();
+    let cid;
+    try {
+      cid = await this.storage.put(encrypted);
+    } catch (err) {
+      throw new Error(`saveMemory: storage.put failed: ${err.message}`);
+    }
+
+    try {
+      const tx = await this.contract.updateMemory(cid, integrityHash);
+      await tx.wait();
+    } catch (err) {
+      throw new Error(`saveMemory: on-chain updateMemory failed: ${err.message}`);
+    }
+
     return { cid, integrityHash };
   }
 
@@ -75,42 +109,113 @@ class EchoClient {
    * @param {Uint8Array} decryptionKey the same 32-byte key used in saveMemory
    */
   async loadMemory(userAddress, decryptionKey) {
-    const [cid, integrityHash] = await this.contract.getMemory(userAddress);
+    if (!userAddress || typeof userAddress !== 'string') {
+      throw new Error('loadMemory: userAddress must be a non-empty string');
+    }
+    if (!(decryptionKey instanceof Uint8Array) || decryptionKey.length !== 32) {
+      throw new Error('loadMemory: decryptionKey must be a 32-byte Uint8Array');
+    }
+
+    let cid, integrityHash;
+    try {
+      [cid, integrityHash] = await this.contract.getMemory(userAddress);
+    } catch (err) {
+      throw new Error(`loadMemory: on-chain getMemory failed (access may be denied): ${err.message}`);
+    }
     if (!cid) return null;
 
-    const encrypted = await this.storage.get(cid);
-    const plaintext = await decrypt(encrypted, decryptionKey);
+    let encrypted;
+    try {
+      encrypted = await this.storage.get(cid);
+    } catch (err) {
+      throw new Error(`loadMemory: storage.get failed for CID "${cid}": ${err.message}`);
+    }
+
+    let plaintext;
+    try {
+      plaintext = await decrypt(encrypted, decryptionKey);
+    } catch (err) {
+      throw new Error(`loadMemory: decryption failed (wrong key or corrupted data): ${err.message}`);
+    }
 
     const computedHash = ethers.keccak256(plaintext);
     if (computedHash !== integrityHash) {
-      throw new Error('Memory integrity check failed: retrieved data does not match on-chain hash');
+      throw new Error('loadMemory: integrity check failed — retrieved data does not match on-chain hash');
     }
-    return JSON.parse(new TextDecoder().decode(plaintext));
+
+    try {
+      return JSON.parse(new TextDecoder().decode(plaintext));
+    } catch (err) {
+      throw new Error(`loadMemory: failed to parse decrypted memory as JSON: ${err.message}`);
+    }
   }
 
   /** Grant a new AI tool (by its contract/wallet address) read access to your context. */
   async grantAccess(appAddress) {
-    const tx = await this.contract.grantAccess(appAddress);
-    return tx.wait();
+    if (!appAddress || typeof appAddress !== 'string') {
+      throw new Error('grantAccess: appAddress must be a non-empty string');
+    }
+    try {
+      const tx = await this.contract.grantAccess(appAddress);
+      return tx.wait();
+    } catch (err) {
+      throw new Error(`grantAccess: transaction failed for ${appAddress}: ${err.message}`);
+    }
   }
 
   /** Revoke a previously granted tool's access — the user controls who reads their context. */
   async revokeAccess(appAddress) {
-    const tx = await this.contract.revokeAccess(appAddress);
-    return tx.wait();
+    if (!appAddress || typeof appAddress !== 'string') {
+      throw new Error('revokeAccess: appAddress must be a non-empty string');
+    }
+    try {
+      const tx = await this.contract.revokeAccess(appAddress);
+      return tx.wait();
+    } catch (err) {
+      throw new Error(`revokeAccess: transaction failed for ${appAddress}: ${err.message}`);
+    }
   }
 
   /** Fund the perpetual-storage renewal endowment for your vault. */
   async fundRenewal(amountInFil) {
-    const tx = await this.contract.fundRenewal({ value: ethers.parseEther(amountInFil) });
-    return tx.wait();
+    if (!amountInFil || typeof amountInFil !== 'string') {
+      throw new Error('fundRenewal: amountInFil must be a non-empty string (e.g. "1.0")');
+    }
+    let value;
+    try {
+      value = ethers.parseEther(amountInFil);
+    } catch (err) {
+      throw new Error(`fundRenewal: invalid FIL amount "${amountInFil}": ${err.message}`);
+    }
+    try {
+      const tx = await this.contract.fundRenewal({ value });
+      return tx.wait();
+    } catch (err) {
+      throw new Error(`fundRenewal: transaction failed: ${err.message}`);
+    }
   }
 
   /** List every AI tool ever granted access, with their current (live) status. */
   async listAccess(userAddress) {
-    const history = await this.contract.appAccessHistory(userAddress);
+    if (!userAddress || typeof userAddress !== 'string') {
+      throw new Error('listAccess: userAddress must be a non-empty string');
+    }
+
+    let history;
+    try {
+      history = await this.contract.appAccessHistory(userAddress);
+    } catch (err) {
+      throw new Error(`listAccess: failed to fetch access history: ${err.message}`);
+    }
+
     const withStatus = await Promise.all(
-      history.map(async (app) => ({ app, active: await this.contract.hasAccess(userAddress, app) }))
+      history.map(async (app) => {
+        try {
+          return { app, active: await this.contract.hasAccess(userAddress, app) };
+        } catch (err) {
+          return { app, active: null, error: err.message };
+        }
+      })
     );
     return withStatus;
   }
