@@ -192,14 +192,6 @@ npm test          # 18 tests, real local chain, no network needed
 
 ## Suggested next steps for a real build
 
-<<<<<<< HEAD
-1. Wire the `storage` adapter to an actual Filecoin upload/retrieval SDK.
-2. Add a contract upgradability pattern (UUPS or Transparent Proxy).
-3. Build an off-chain keeper for auto-renewal.
-4. Security audit before mainnet deployment.
-5. At least one real AI platform integration to prove the portability loop
-   end-to-end.
-=======
 1. ~~Wire the `storage` adapter to an actual Filecoin upload/retrieval SDK.~~
    **Done** — `lib/storage.js` uses Lighthouse.
 2. ~~Add an upgradability pattern (UUPS proxy).~~
@@ -210,4 +202,3 @@ npm test          # 18 tests, real local chain, no network needed
    — this scaffold is tested for correctness, not reviewed for security.
 5. Build the first real AI platform integration (e.g. a ChatGPT / Claude
    plugin that reads and writes Echo context).
->>>>>>> 43876f9 (Add Lighthouse storage adapter for real Filecoin storage)
