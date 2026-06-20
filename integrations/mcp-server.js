@@ -204,7 +204,7 @@ function startStdioServer() {
     process.exit(1);
   }
 
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
   const signer = new ethers.Wallet(privateKey, provider);
   const storage = createLighthouseStorage(lighthouseApiKey);
 

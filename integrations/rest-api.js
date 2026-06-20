@@ -180,7 +180,7 @@ function startServer() {
   if (!privateKey) { console.error('Error: PRIVATE_KEY required'); process.exit(1); }
   if (!lighthouseApiKey) { console.error('Error: LIGHTHOUSE_API_KEY required'); process.exit(1); }
 
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
   const signer = new ethers.Wallet(privateKey, provider);
   const storage = createLighthouseStorage(lighthouseApiKey);
 
