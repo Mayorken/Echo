@@ -155,6 +155,9 @@ function createMcpHandler(config) {
   return async function handleToolCall(name, args) {
     switch (name) {
       case 'echo_save_context': {
+        if (!args.context || typeof args.context !== 'object') {
+          throw new Error('A "context" object is required');
+        }
         const result = await client.saveMemory(args.context, encryptionKey);
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, cid: result.cid, integrityHash: result.integrityHash }) }] };
       }
