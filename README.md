@@ -83,12 +83,16 @@ they authorize.
   via contract events, `renewer.js` checks deal status and re-pins via
   Lighthouse, `index.js` orchestrates periodic sweeps. `keeper.js` is the
   CLI entry point.
+- **`integrations/`** — AI platform integration adapters:
+  - `rest-api.js` — Express HTTP API wrapping all Echo SDK operations.
+  - `mcp-server.js` — MCP tool server for Claude Desktop (stdio transport).
+  - `openapi.json` — OpenAPI 3.0 spec for ChatGPT Actions compatibility.
 - **`deploy.js`** — deploys implementation + ERC1967 proxy to Filecoin's
   Calibration testnet.
 - **`compile.js`** / **`compile-helper.js`** — compile the contract(s) and
   produce the ABI (`EchoMemoryRegistry.abi.json`, already generated).
 
-Run `npm test` yourself — all tests passing, no network access required.
+Run `npm test` yourself — 114 tests passing, no network access required.
 
 ## How the pitch maps to the code
 
@@ -228,6 +232,71 @@ npm test          # 18 tests, real local chain, no network needed
 4. The script deploys the implementation + ERC1967 proxy and prints both
    addresses. Use the **proxy address** when instantiating `EchoClient`.
 
+## AI platform integrations
+
+Echo ships with integration adapters for the two dominant AI platform patterns:
+
+### REST API (all platforms)
+
+A standard HTTP API wrapping the Echo SDK. Works with ChatGPT Actions,
+Gemini, or any AI tool with HTTP capabilities.
+
+```bash
+RPC_URL=https://api.calibration.node.glif.io/rpc/v1 \
+CONTRACT_ADDRESS=0x... \
+PRIVATE_KEY=0x... \
+LIGHTHOUSE_API_KEY=your-key \
+ENCRYPTION_KEY=hex-encoded-32-byte-key \
+node integrations/rest-api.js
+```
+
+Endpoints: `POST /context/save`, `GET /context/load/:userAddress`,
+`POST /access/grant`, `POST /access/revoke`, `GET /access/list/:userAddress`,
+`POST /renewal/fund`, `POST /key/generate`, `GET /health`.
+
+### ChatGPT Actions (OpenAPI)
+
+Import `integrations/openapi.json` as a ChatGPT Action schema. Point the
+server URL at your running REST API. ChatGPT can then save/load/manage
+Echo context directly from conversations.
+
+### Claude Desktop (MCP)
+
+Add Echo as an MCP tool server in `~/.claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "echo": {
+      "command": "node",
+      "args": ["path/to/Echo/integrations/mcp-server.js"],
+      "env": {
+        "RPC_URL": "https://api.calibration.node.glif.io/rpc/v1",
+        "CONTRACT_ADDRESS": "0x...",
+        "PRIVATE_KEY": "0x...",
+        "LIGHTHOUSE_API_KEY": "your-key",
+        "ENCRYPTION_KEY": "hex-encoded-32-byte-key"
+      }
+    }
+  }
+}
+```
+
+Claude Desktop will then have 7 tools: `echo_save_context`,
+`echo_load_context`, `echo_grant_access`, `echo_revoke_access`,
+`echo_list_access`, `echo_fund_renewal`, `echo_generate_key`.
+
+### Environment variables (integrations)
+
+| Variable | Required | Description |
+|---|---|---|
+| `RPC_URL` | Yes | FEVM RPC endpoint |
+| `CONTRACT_ADDRESS` | Yes | EchoMemoryRegistry proxy address |
+| `PRIVATE_KEY` | Yes | Wallet private key for signing txs |
+| `LIGHTHOUSE_API_KEY` | Yes | Lighthouse API key for Filecoin storage |
+| `ENCRYPTION_KEY` | No | Hex-encoded 32-byte key (generated if omitted) |
+| `PORT` | No | REST API port (default: 3000) |
+
 ## Suggested next steps for a real build
 
 1. ~~Wire the `storage` adapter to an actual Filecoin upload/retrieval SDK.~~
@@ -236,9 +305,9 @@ npm test          # 18 tests, real local chain, no network needed
    **Done** — contract is now UUPS-upgradeable via OpenZeppelin v5.
 3. ~~Build the auto-renewal keeper.~~
    **Done** — `keeper/` monitors funded vaults and re-pins expiring CIDs via Lighthouse.
-4. Get a real audit before this touches real user data or real FIL at scale
+4. ~~Build the first AI platform integration.~~
+   **Done** — REST API, MCP server for Claude Desktop, and OpenAPI spec for ChatGPT Actions.
+5. Get a real audit before this touches real user data or real FIL at scale
    — this scaffold is tested for correctness, not reviewed for security.
-5. Build the first real AI platform integration (e.g. a ChatGPT / Claude
-   plugin that reads and writes Echo context).
 6. Add a keeper-authorized spend path to the contract so the keeper can
    deduct re-pinning costs from each vault's `renewalBalance` automatically.
