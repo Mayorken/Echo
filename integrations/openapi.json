@@ -1,0 +1,297 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Echo — AI Context Portability API",
+    "version": "0.1.0",
+    "description": "REST API for Echo's universal AI context portability layer. Save, load, and manage portable context that follows the user across AI tools — encrypted, stored on Filecoin, controlled by the user's smart contract."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "healthCheck",
+        "summary": "Check API health",
+        "responses": {
+          "200": {
+            "description": "API is running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" },
+                    "contractAddress": { "type": "string" },
+                    "timestamp": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/context/save": {
+      "post": {
+        "operationId": "saveContext",
+        "summary": "Save or update the user's AI context",
+        "description": "Encrypts the context client-side, uploads to Filecoin via Lighthouse, and records the CID + integrity hash on-chain.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["context"],
+                "properties": {
+                  "context": {
+                    "type": "object",
+                    "description": "The context to save. Any JSON-serializable object: project info, preferences, architecture decisions, etc."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Context saved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "cid": { "type": "string", "description": "IPFS/Filecoin content identifier" },
+                    "integrityHash": { "type": "string", "description": "Keccak256 hash of the plaintext" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid request body" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/context/load/{userAddress}": {
+      "get": {
+        "operationId": "loadContext",
+        "summary": "Load a user's portable AI context",
+        "description": "Fetches the encrypted context from Filecoin, decrypts it, and verifies integrity against the on-chain hash. Requires granted access.",
+        "parameters": [
+          {
+            "name": "userAddress",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Ethereum address of the user whose context to load"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Context loaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "context": { "type": "object", "nullable": true },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid address" },
+          "500": { "description": "Access denied or server error" }
+        }
+      }
+    },
+    "/access/grant": {
+      "post": {
+        "operationId": "grantAccess",
+        "summary": "Grant an AI tool read access to the user's context",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["appAddress"],
+                "properties": {
+                  "appAddress": {
+                    "type": "string",
+                    "description": "Ethereum address of the AI tool to grant access to"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access granted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "granted": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid address" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/access/revoke": {
+      "post": {
+        "operationId": "revokeAccess",
+        "summary": "Revoke an AI tool's access to the user's context",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["appAddress"],
+                "properties": {
+                  "appAddress": {
+                    "type": "string",
+                    "description": "Ethereum address of the AI tool to revoke"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "revoked": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid address" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/access/list/{userAddress}": {
+      "get": {
+        "operationId": "listAccess",
+        "summary": "List all AI tools with access status",
+        "parameters": [
+          {
+            "name": "userAddress",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Ethereum address of the user"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Access list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "apps": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "address": { "type": "string" },
+                          "active": { "type": "boolean" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/renewal/fund": {
+      "post": {
+        "operationId": "fundRenewal",
+        "summary": "Fund perpetual-storage renewal endowment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["amountInFil"],
+                "properties": {
+                  "amountInFil": {
+                    "type": "string",
+                    "description": "Amount of FIL to fund (e.g. '0.1')"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Renewal funded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "funded": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/key/generate": {
+      "post": {
+        "operationId": "generateKey",
+        "summary": "Generate a new 256-bit encryption key",
+        "responses": {
+          "200": {
+            "description": "Key generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "key": { "type": "string", "description": "Hex-encoded 32-byte key" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
