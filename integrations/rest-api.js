@@ -19,6 +19,9 @@
  */
 
 const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const { ethers } = require('ethers');
 const { EchoClient, generateEncryptionKey } = require('../echo-sdk');
 const { createLighthouseStorage } = require('../lib/storage');
@@ -33,7 +36,10 @@ function createApp(config) {
   } = config;
 
   const app = express();
-  app.use(express.json());
+  app.use(helmet());
+  app.use(cors());
+  app.use(express.json({ limit: '1mb' }));
+  app.use(rateLimit({ windowMs: 60000, max: 60, standardHeaders: true, legacyHeaders: false }));
 
   const client = new EchoClient(rpcUrl, contractAddress, signer, storage);
 
@@ -55,7 +61,8 @@ function createApp(config) {
       const result = await client.saveMemory(context, encryptionKey);
       res.json({ success: true, cid: result.cid, integrityHash: result.integrityHash });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error('POST /context/save error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
@@ -75,7 +82,8 @@ function createApp(config) {
       }
       res.json({ context });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error('GET /context/load error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
@@ -93,7 +101,8 @@ function createApp(config) {
       await client.grantAccess(appAddress);
       res.json({ success: true, granted: appAddress });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error('POST /access/grant error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
@@ -111,7 +120,8 @@ function createApp(config) {
       await client.revokeAccess(appAddress);
       res.json({ success: true, revoked: appAddress });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error('POST /access/revoke error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
@@ -128,7 +138,8 @@ function createApp(config) {
       const apps = await client.listAccess(userAddress);
       res.json({ apps });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error('GET /access/list error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
@@ -146,7 +157,8 @@ function createApp(config) {
       await client.fundRenewal(amountInFil);
       res.json({ success: true, funded: amountInFil });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error('POST /renewal/fund error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
@@ -160,7 +172,8 @@ function createApp(config) {
       const hex = Buffer.from(key).toString('hex');
       res.json({ key: hex });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error('POST /key/generate error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 

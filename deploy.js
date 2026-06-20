@@ -27,7 +27,7 @@ async function main() {
   const contracts = compileAll();
   const proxyArtifact = compileProxy();
 
-  const provider = new ethers.JsonRpcProvider(CALIBRATION_RPC);
+  const provider = new ethers.JsonRpcProvider(CALIBRATION_RPC, undefined, { cacheTimeout: -1 });
   const wallet = new ethers.Wallet(privateKey, provider);
 
   // 1. Deploy the implementation contract

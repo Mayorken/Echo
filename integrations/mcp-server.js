@@ -159,6 +159,9 @@ function createMcpHandler(config) {
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, cid: result.cid, integrityHash: result.integrityHash }) }] };
       }
       case 'echo_load_context': {
+        if (!args.userAddress || !ethers.isAddress(args.userAddress)) {
+          throw new Error('Valid userAddress is required');
+        }
         const context = await client.loadMemory(args.userAddress, encryptionKey);
         if (context === null) {
           return { content: [{ type: 'text', text: JSON.stringify({ context: null, message: 'No context stored for this user' }) }] };
@@ -166,18 +169,30 @@ function createMcpHandler(config) {
         return { content: [{ type: 'text', text: JSON.stringify({ context }) }] };
       }
       case 'echo_grant_access': {
+        if (!args.appAddress || !ethers.isAddress(args.appAddress)) {
+          throw new Error('Valid appAddress is required');
+        }
         await client.grantAccess(args.appAddress);
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, granted: args.appAddress }) }] };
       }
       case 'echo_revoke_access': {
+        if (!args.appAddress || !ethers.isAddress(args.appAddress)) {
+          throw new Error('Valid appAddress is required');
+        }
         await client.revokeAccess(args.appAddress);
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, revoked: args.appAddress }) }] };
       }
       case 'echo_list_access': {
+        if (!args.userAddress || !ethers.isAddress(args.userAddress)) {
+          throw new Error('Valid userAddress is required');
+        }
         const apps = await client.listAccess(args.userAddress);
         return { content: [{ type: 'text', text: JSON.stringify({ apps }) }] };
       }
       case 'echo_fund_renewal': {
+        if (!args.amountInFil || isNaN(Number(args.amountInFil)) || Number(args.amountInFil) <= 0) {
+          throw new Error('Valid amountInFil is required');
+        }
         await client.fundRenewal(args.amountInFil);
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, funded: args.amountInFil }) }] };
       }
