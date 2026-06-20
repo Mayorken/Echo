@@ -74,5 +74,6 @@ describe('compile-helper.js', function () {
     expect(names).to.include('NothingToWithdraw');
     expect(names).to.include('TransferFailed');
     expect(names).to.include('EmptyCid');
+    expect(names).to.include('ZeroFundAmount');
   });
 });

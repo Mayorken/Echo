@@ -83,7 +83,7 @@ describe('EchoMemoryRegistry (running on a local in-process chain)', function ()
       await expectRevertedWithCustomError(
         () => registry.connect(owner).fundRenewal({ value: 0 }),
         registry,
-        'NothingToWithdraw'
+        'ZeroFundAmount'
       );
     });
   });
