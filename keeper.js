@@ -19,6 +19,7 @@
  *   node keeper.js
  */
 
+require('dotenv').config();
 const { runSweep, startKeeper } = require('./keeper/index');
 
 const config = {

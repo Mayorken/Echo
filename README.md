@@ -281,18 +281,44 @@ await client.saveMemory({ stack: ['Go', 'PostgreSQL'], task: 'listing endpoint' 
 Get a free API key at [files.lighthouse.storage](https://files.lighthouse.storage).
 Premium users can pass a custom gateway: `createLighthouseStorage(key, { gateway: 'https://your-gateway.io/ipfs' })`.
 
+## Live deployment (Calibration testnet)
+
+EchoMemoryRegistryV3 is deployed and verified on Filecoin Calibration testnet:
+
+| | |
+|---|---|
+| **Proxy (permanent address)** | `0x962C42f208d89D5bF1698E3397BC78176D70cE0c` |
+| **Implementation** | `0x89E0F6ce0Bcb1DB76764360B422002Ff7488647F` |
+| **Version** | 3 |
+| **Network** | Filecoin Calibration (chainId 314159) |
+| **Explorer** | https://calibration.filscan.io/address/0x962C42f208d89D5bF1698E3397BC78176D70cE0c |
+
+## Quickstart
+
+```bash
+cp .env.example .env   # fill in PRIVATE_KEY and LIGHTHOUSE_API_KEY
+npm install
+npm run smoke          # verify the live contract (no FIL spent)
+npm run demo           # full local demo on Ganache (no external deps)
+npm test               # full test suite against local chain
+```
+
 ## Verifying it yourself
 
 ```
 npm install
 npm run compile   # compiles the contract, regenerates the ABI
 npm test          # 18 tests, real local chain, no network needed
+npm run smoke     # 8 live checks against the Calibration deployment
 ```
 
 ## Deploying to Filecoin Calibration testnet
 
+The contract is already deployed (see **Live deployment** above). To deploy
+your own instance or to mainnet:
+
 1. Get a wallet funded with test FIL from the Calibration faucet.
-2. `export PRIVATE_KEY=0x...` (never commit a real key).
+2. Copy `.env.example` to `.env` and fill in `PRIVATE_KEY`.
 3. `npm run deploy`
 4. The script deploys the implementation + ERC1967 proxy and prints both
    addresses. Use the **proxy address** when instantiating `EchoClient`.
@@ -337,8 +363,8 @@ Add Echo as an MCP tool server in `~/.claude/claude_desktop_config.json`:
       "args": ["path/to/Echo/integrations/mcp-server.js"],
       "env": {
         "RPC_URL": "https://api.calibration.node.glif.io/rpc/v1",
-        "CONTRACT_ADDRESS": "0x...",
-        "PRIVATE_KEY": "0x...",
+        "CONTRACT_ADDRESS": "0x962C42f208d89D5bF1698E3397BC78176D70cE0c",
+        "PRIVATE_KEY": "0x_your_key",
         "LIGHTHOUSE_API_KEY": "your-key",
         "ENCRYPTION_KEY": "hex-encoded-32-byte-key"
       }

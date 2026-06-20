@@ -36,6 +36,7 @@
  *   ENCRYPTION_KEY     — Hex-encoded 32-byte encryption key
  */
 
+require('dotenv').config();
 const { ethers } = require('ethers');
 const { EchoClient, generateEncryptionKey } = require('../echo-sdk');
 const { createLighthouseStorage } = require('../lib/storage');
