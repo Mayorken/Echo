@@ -144,6 +144,11 @@ async function startStripeWebhook(config) {
   const app = express();
 
   // Stripe requires the raw body for signature verification
+  // Track processed payment intent IDs to guard against Stripe's at-least-once
+  // delivery (it retries webhooks on 5xx). A plain in-memory Set is sufficient
+  // for single-process deployments; use Redis or a DB for multi-instance setups.
+  const processedIntents = new Set();
+
   app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     let event;
     try {
@@ -155,6 +160,14 @@ async function startStripeWebhook(config) {
 
     if (event.type === 'payment_intent.succeeded') {
       const intent = event.data.object;
+
+      // Idempotency guard: Stripe retries on 5xx, so the same intent can arrive twice.
+      if (processedIntents.has(intent.id)) {
+        log(`[funding-bridge] Duplicate delivery of ${intent.id} — skipping`);
+        return res.json({ received: true });
+      }
+      processedIntents.add(intent.id);
+
       const echoAddress = intent.metadata && intent.metadata.echoAddress;
       const filAmount = intent.metadata && intent.metadata.filAmount;
 

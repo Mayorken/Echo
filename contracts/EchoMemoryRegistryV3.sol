@@ -84,15 +84,26 @@ contract EchoMemoryRegistryV3 is EchoMemoryRegistryV2 {
      *         Any third party can run a Keeper — this is what makes the protocol
      *         decentralized. The owner doesn't service vaults; they only vouch
      *         for which Keeper addresses are permitted to pull funds.
+     *
+     *         Trust model: an authorized keeper can deduct up to a user's full
+     *         renewalBalance in a single call. If the owner's key is compromised
+     *         an attacker could add a malicious keeper and drain all funded vaults.
+     *         Mitigations: use a multisig as owner, monitor KeeperAdded events,
+     *         and keep renewalBalances sized to near-term renewal costs only.
      */
     function addKeeper(address keeper) external onlyOwner {
-        _authorizedKeepers[keeper] = true;
-        emit KeeperAdded(keeper);
+        if (keeper == address(0)) revert NotAuthorized();
+        if (!_authorizedKeepers[keeper]) {
+            _authorizedKeepers[keeper] = true;
+            emit KeeperAdded(keeper);
+        }
     }
 
     function removeKeeper(address keeper) external onlyOwner {
-        _authorizedKeepers[keeper] = false;
-        emit KeeperRemoved(keeper);
+        if (_authorizedKeepers[keeper]) {
+            _authorizedKeepers[keeper] = false;
+            emit KeeperRemoved(keeper);
+        }
     }
 
     function isKeeper(address addr) external view returns (bool) {
@@ -185,6 +196,7 @@ contract EchoMemoryRegistryV3 is EchoMemoryRegistryV2 {
      *         add new members — teammates cannot invite others without owner sign-off.
      */
     function grantVaultAccess(bytes32 vaultId, address member) external {
+        if (_vaultOwner[vaultId] == address(0)) revert VaultNotFound();
         if (_vaultOwner[vaultId] != msg.sender) revert NotVaultOwner();
         if (member == address(0)) revert NotAuthorized();
         if (!_vaultMembers[vaultId][member]) {
@@ -199,6 +211,7 @@ contract EchoMemoryRegistryV3 is EchoMemoryRegistryV2 {
      *         The owner cannot revoke themselves (the vault would become write-locked).
      */
     function revokeVaultAccess(bytes32 vaultId, address member) external {
+        if (_vaultOwner[vaultId] == address(0)) revert VaultNotFound();
         if (_vaultOwner[vaultId] != msg.sender) revert NotVaultOwner();
         if (member == msg.sender) revert NotAuthorized();
         if (_vaultMembers[vaultId][member]) {

@@ -158,6 +158,74 @@ proxy.upgradeToAndCall(newImplAddress, '0x')
 The test suite exercises the full V1→V2 upgrade cycle: deploy V1 behind proxy,
 write data, upgrade to V2, verify all storage is intact and `version()` returns 2.
 
+## Team Vaults (V3)
+
+Shared context for engineering teams — on-chain RBAC, no central server.
+
+```javascript
+const { EchoClient, generateEncryptionKey, createLighthouseStorage } = require('./echo-sdk');
+
+const storage = createLighthouseStorage(process.env.LIGHTHOUSE_API_KEY);
+const client = new EchoClient(rpcUrl, contractAddress, ownerSigner, storage);
+const sharedKey = await generateEncryptionKey(); // share with team out-of-band
+
+// Create vault and invite teammates
+await client.createVault('team-alpha');
+await client.grantVaultAccess('team-alpha', '0xTeammate1...');
+await client.grantVaultAccess('team-alpha', '0xTeammate2...');
+
+// Any member can save
+await client.saveVaultMemory('team-alpha', { stack: 'Go/PostgreSQL', decisions: [...] }, sharedKey);
+
+// Any member can load
+const ctx = await client.loadVaultMemory('team-alpha', sharedKey);
+```
+
+Vault names are hashed on-chain (`keccak256`) so `"team-alpha"` always resolves to the same vault regardless of who calls it. Only the vault owner can grant or revoke members. Context is encrypted client-side — the Keeper and any intermediary see only ciphertext.
+
+### Keeper spend path (V3)
+
+Authorize a Keeper to deduct re-pinning costs from a user's pre-funded balance:
+
+```bash
+# Contract owner: authorize a keeper address
+cast send $CONTRACT_ADDRESS "addKeeper(address)" $KEEPER_ADDRESS --private-key $OWNER_KEY
+
+# Keeper: run with signing capability so it can call keeperDeductRenewal()
+KEEPER_PRIVATE_KEY=0x... node keeper.js
+```
+
+The keeper deducts `KEEPER_FEE_WEI` (default 0.01 FIL) from the user's `renewalBalance` after each successful re-pin. Users withdraw unused balance at any time via `withdrawRenewal()`.
+
+### Social Login — Web3Auth (optional, browser only)
+
+```javascript
+import { createWeb3AuthSigner, EchoClient } from './echo-sdk';
+
+// Returns an ethers Signer backed by Google/GitHub/etc — no raw private key needed.
+// Requires: npm install @web3auth/modal @web3auth/base
+const signer = await createWeb3AuthSigner('YOUR_WEB3AUTH_CLIENT_ID', {
+  rpcUrl: 'https://api.calibration.node.glif.io/rpc/v1',
+  network: 'sapphire_devnet',   // 'sapphire_mainnet' for production
+});
+const client = new EchoClient(rpcUrl, contractAddress, signer, storage);
+```
+
+Keys are derived non-custodially client-side — Echo never sees them, and Web3Auth never sees the user's context.
+
+### Funding Bridge
+
+Fund a vault's renewal endowment from any payment source:
+
+```bash
+# Direct wallet funding
+RPC_URL=... CONTRACT_ADDRESS=... PRIVATE_KEY=... npm run fund -- --amount 0.5
+
+# Stripe webhook: fires fundRenewal() when a payment succeeds.
+# PaymentIntent must have metadata: { echoAddress: "0x...", filAmount: "0.5" }
+STRIPE_WEBHOOK_SECRET=whsec_... npm run fund -- --stripe-webhook --port 4242
+```
+
 ## Auto-renewal keeper bot
 
 The keeper monitors funded vaults and automatically re-pins context whose
@@ -189,14 +257,11 @@ node keeper.js
 | `RPC_URL` | Yes | FEVM RPC endpoint |
 | `CONTRACT_ADDRESS` | Yes | EchoMemoryRegistry proxy address |
 | `LIGHTHOUSE_API_KEY` | Yes | Lighthouse API key for re-pinning |
+| `KEEPER_PRIVATE_KEY` | No | Keeper's wallet key — enables on-chain reimbursement via `keeperDeductRenewal()`. Without it the keeper runs in observation mode (re-pins but doesn't deduct). |
+| `KEEPER_FEE_WEI` | No | Fee per successful re-pin in wei (default: 10000000000000000 = 0.01 FIL). Must be ≤ 1 FIL or the keeper refuses to start. |
 | `KEEPER_INTERVAL_MS` | No | Sweep interval in ms (default: 3600000 = 1 hour) |
 | `KEEPER_FROM_BLOCK` | No | Block to start scanning from (default: 0) |
 | `KEEPER_GATEWAY` | No | Custom IPFS gateway URL |
-
-**Current limitation:** the keeper operator pays for re-pinning via their
-Lighthouse API key. The on-chain `renewalBalance` tracks the user's funding
-commitment but isn't deducted automatically — that requires a contract upgrade
-to add a keeper-authorized spend path (planned).
 
 ## Using real Filecoin storage (Lighthouse)
 
@@ -282,9 +347,12 @@ Add Echo as an MCP tool server in `~/.claude/claude_desktop_config.json`:
 }
 ```
 
-Claude Desktop will then have 7 tools: `echo_save_context`,
+Claude Desktop will then have 13 tools: `echo_save_context`,
 `echo_load_context`, `echo_grant_access`, `echo_revoke_access`,
-`echo_list_access`, `echo_fund_renewal`, `echo_generate_key`.
+`echo_list_access`, `echo_fund_renewal`, `echo_generate_key`,
+plus the V3 vault tools: `echo_create_vault`, `echo_save_vault_context`,
+`echo_load_vault_context`, `echo_grant_vault_access`, `echo_revoke_vault_access`,
+`echo_has_vault_access`.
 
 ### Environment variables (integrations)
 
@@ -307,7 +375,9 @@ Claude Desktop will then have 7 tools: `echo_save_context`,
    **Done** — `keeper/` monitors funded vaults and re-pins expiring CIDs via Lighthouse.
 4. ~~Build the first AI platform integration.~~
    **Done** — REST API, MCP server for Claude Desktop, and OpenAPI spec for ChatGPT Actions.
-5. Get a real audit before this touches real user data or real FIL at scale
-   — this scaffold is tested for correctness, not reviewed for security.
-6. Add a keeper-authorized spend path to the contract so the keeper can
-   deduct re-pinning costs from each vault's `renewalBalance` automatically.
+5. ~~Get a real audit before this touches real user data or real FIL at scale.~~
+   **Done** — V1 audited by Devin AI (11 vulnerabilities fixed). V3 internal audit
+   in `docs/security-audit-v3.md` (0 critical/high, 5 medium/low remediated).
+6. ~~Add a keeper-authorized spend path to the contract so the keeper can
+   deduct re-pinning costs from each vault's `renewalBalance` automatically.~~
+   **Done** — `keeperDeductRenewal()` in V3 + keeper wired to call it after re-pin.

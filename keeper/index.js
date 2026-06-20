@@ -59,6 +59,17 @@ async function runSweep(config) {
     ? BigInt(config.keeperFeeWei)
     : ethers.parseEther('0.01');
 
+  // Sanity-check: reject obviously misconfigured fees (> 1 FIL per renewal).
+  // A misconfigured fee won't lose funds (the contract enforces amount <= balance),
+  // but it would drain balances faster than intended and is almost certainly a typo.
+  const MAX_REASONABLE_FEE = ethers.parseEther('1');
+  if (keeperFeeWei > MAX_REASONABLE_FEE) {
+    throw new Error(
+      `keeperFeeWei (${keeperFeeWei}) exceeds 1 FIL — this looks like a misconfiguration. ` +
+      `Set config.keeperFeeWei explicitly or check your environment variables.`
+    );
+  }
+
   log('[keeper] Starting sweep...');
 
   const { vaults, lastBlock } = await scanFundedVaults(contract, { fromBlock: config.fromBlock || 0 });

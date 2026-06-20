@@ -272,6 +272,15 @@ class EchoClient {
  * @returns {Promise<ethers.Signer>}
  */
 async function createWeb3AuthSigner(clientId, options = {}) {
+  // Web3Auth modal uses browser APIs (window, document, localStorage).
+  // Calling this in Node.js will fail at web3auth.initModal() with an opaque error.
+  if (typeof window === 'undefined') {
+    throw new Error(
+      'createWeb3AuthSigner() requires a browser environment. ' +
+      'For server-side or CLI use, pass an ethers.Wallet signer directly instead.'
+    );
+  }
+
   let Web3Auth, CHAIN_NAMESPACES;
   try {
     ({ Web3Auth } = require('@web3auth/modal'));
