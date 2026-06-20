@@ -52,6 +52,7 @@ contract EchoMemoryRegistry is
     error NotAuthorized();
     error NothingToWithdraw();
     error TransferFailed();
+    error EmptyCid();
 
     modifier onlySelfOrGrantedApp(address user) {
         if (msg.sender != user && !accessList[user][msg.sender]) revert NotAuthorized();
@@ -83,6 +84,7 @@ contract EchoMemoryRegistry is
      *        Filecoin's own Proof of Data Possession at the storage layer).
      */
     function updateMemory(string calldata cid, bytes32 integrityHash) external {
+        if (bytes(cid).length == 0) revert EmptyCid();
         MemoryVault storage vault = vaults[msg.sender];
         vault.cid = cid;
         vault.integrityHash = integrityHash;
@@ -95,6 +97,7 @@ contract EchoMemoryRegistry is
      * @param app The address representing the AI tool requesting access.
      */
     function grantAccess(address app) external {
+        if (app == address(0)) revert NotAuthorized();
         if (!accessList[msg.sender][app]) {
             accessList[msg.sender][app] = true;
             grantedAppsHistory[msg.sender].push(app);
@@ -141,6 +144,7 @@ contract EchoMemoryRegistry is
      *         so the context file never expires.
      */
     function fundRenewal() external payable {
+        if (msg.value == 0) revert NothingToWithdraw();
         MemoryVault storage vault = vaults[msg.sender];
         vault.renewalBalance += msg.value;
         emit RenewalFunded(msg.sender, msg.value, vault.renewalBalance);

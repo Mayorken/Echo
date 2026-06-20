@@ -73,5 +73,6 @@ describe('compile-helper.js', function () {
     expect(names).to.include('NotAuthorized');
     expect(names).to.include('NothingToWithdraw');
     expect(names).to.include('TransferFailed');
+    expect(names).to.include('EmptyCid');
   });
 });

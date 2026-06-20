@@ -144,6 +144,63 @@ describe('integrations/mcp-server.js', function () {
     });
   });
 
+  describe('input validation', function () {
+    it('rejects invalid userAddress in echo_load_context', async function () {
+      let threw = false;
+      try {
+        await handleToolCall('echo_load_context', { userAddress: 'bad' });
+      } catch (err) {
+        threw = true;
+        expect(err.message).to.include('Valid userAddress');
+      }
+      expect(threw).to.equal(true);
+    });
+
+    it('rejects invalid appAddress in echo_grant_access', async function () {
+      let threw = false;
+      try {
+        await handleToolCall('echo_grant_access', { appAddress: 'not-valid' });
+      } catch (err) {
+        threw = true;
+        expect(err.message).to.include('Valid appAddress');
+      }
+      expect(threw).to.equal(true);
+    });
+
+    it('rejects invalid appAddress in echo_revoke_access', async function () {
+      let threw = false;
+      try {
+        await handleToolCall('echo_revoke_access', { appAddress: '' });
+      } catch (err) {
+        threw = true;
+        expect(err.message).to.include('Valid appAddress');
+      }
+      expect(threw).to.equal(true);
+    });
+
+    it('rejects invalid userAddress in echo_list_access', async function () {
+      let threw = false;
+      try {
+        await handleToolCall('echo_list_access', { userAddress: '0xinvalid' });
+      } catch (err) {
+        threw = true;
+        expect(err.message).to.include('Valid userAddress');
+      }
+      expect(threw).to.equal(true);
+    });
+
+    it('rejects invalid amountInFil in echo_fund_renewal', async function () {
+      let threw = false;
+      try {
+        await handleToolCall('echo_fund_renewal', { amountInFil: '-1' });
+      } catch (err) {
+        threw = true;
+        expect(err.message).to.include('Valid amountInFil');
+      }
+      expect(threw).to.equal(true);
+    });
+  });
+
   describe('unknown tool', function () {
     it('throws on unknown tool name', async function () {
       let threw = false;

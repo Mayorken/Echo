@@ -62,6 +62,32 @@ describe('EchoMemoryRegistry (running on a local in-process chain)', function ()
     });
   });
 
+  describe('input validation', function () {
+    it('rejects empty CID in updateMemory', async function () {
+      await expectRevertedWithCustomError(
+        () => registry.connect(owner).updateMemory('', integrityHash),
+        registry,
+        'EmptyCid'
+      );
+    });
+
+    it('rejects granting access to the zero address', async function () {
+      await expectRevertedWithCustomError(
+        () => registry.connect(owner).grantAccess(ethers.ZeroAddress),
+        registry,
+        'NotAuthorized'
+      );
+    });
+
+    it('rejects funding with zero value', async function () {
+      await expectRevertedWithCustomError(
+        () => registry.connect(owner).fundRenewal({ value: 0 }),
+        registry,
+        'NothingToWithdraw'
+      );
+    });
+  });
+
   describe('access control', function () {
     beforeEach(async function () {
       await registry.connect(owner).updateMemory(cid, integrityHash);

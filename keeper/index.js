@@ -29,7 +29,7 @@ const { checkDealStatus, repinCid } = require('./renewer');
  */
 async function runSweep(config) {
   const log = config.log || console.log;
-  const provider = new ethers.JsonRpcProvider(config.rpcUrl);
+  const provider = new ethers.JsonRpcProvider(config.rpcUrl, undefined, { cacheTimeout: -1 });
   const contract = new ethers.Contract(config.contractAddress, registryAbi, provider);
 
   log('[keeper] Starting sweep...');

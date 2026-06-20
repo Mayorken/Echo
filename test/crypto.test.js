@@ -73,6 +73,42 @@ describe('lib/crypto.js (AES-256-GCM unit tests)', function () {
     });
   });
 
+  describe('key and input validation', function () {
+    it('encrypt rejects a key that is not 32 bytes', async function () {
+      let threw = false;
+      try {
+        await encrypt(new Uint8Array(Buffer.from('test')), new Uint8Array(16));
+      } catch (err) {
+        threw = true;
+        expect(err.message).to.include('32 bytes');
+      }
+      expect(threw).to.equal(true);
+    });
+
+    it('decrypt rejects a key that is not 32 bytes', async function () {
+      let threw = false;
+      try {
+        await decrypt(new Uint8Array(64), new Uint8Array(16));
+      } catch (err) {
+        threw = true;
+        expect(err.message).to.include('32 bytes');
+      }
+      expect(threw).to.equal(true);
+    });
+
+    it('decrypt rejects ciphertext that is too short', async function () {
+      const key = await generateKey();
+      let threw = false;
+      try {
+        await decrypt(new Uint8Array(10), key);
+      } catch (err) {
+        threw = true;
+        expect(err.message).to.include('too short');
+      }
+      expect(threw).to.equal(true);
+    });
+  });
+
   describe('decryption failures', function () {
     it('throws when decrypting with the wrong key', async function () {
       const rightKey = await generateKey();
