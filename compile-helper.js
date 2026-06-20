@@ -9,6 +9,8 @@ function findImports(importPath) {
   const candidates = [
     path.join(__dirname, 'node_modules', importPath),
     path.join(__dirname, 'contracts', importPath),
+    // Shims for OZ contracts removed in v5 (e.g. ReentrancyGuardUpgradeable)
+    path.join(__dirname, 'contracts', 'shims', path.basename(importPath)),
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
@@ -41,6 +43,12 @@ function compileAll() {
         'utf8'
       ),
     },
+    'EchoMemoryRegistryV3.sol': {
+      content: fs.readFileSync(
+        path.join(__dirname, 'contracts', 'EchoMemoryRegistryV3.sol'),
+        'utf8'
+      ),
+    },
   };
 
   const input = {
@@ -66,6 +74,8 @@ function compileAll() {
   const attacker = output.contracts['ReentrancyAttacker.sol']['ReentrancyAttacker'];
   const registryV2 = output.contracts['EchoMemoryRegistryV2.sol']['EchoMemoryRegistryV2'];
 
+  const registryV3 = output.contracts['EchoMemoryRegistryV3.sol']['EchoMemoryRegistryV3'];
+
   const result = {
     EchoMemoryRegistry: { abi: registry.abi, bytecode: '0x' + registry.evm.bytecode.object },
     ReentrancyAttacker: { abi: attacker.abi, bytecode: '0x' + attacker.evm.bytecode.object },
@@ -73,6 +83,10 @@ function compileAll() {
 
   if (registryV2) {
     result.EchoMemoryRegistryV2 = { abi: registryV2.abi, bytecode: '0x' + registryV2.evm.bytecode.object };
+  }
+
+  if (registryV3) {
+    result.EchoMemoryRegistryV3 = { abi: registryV3.abi, bytecode: '0x' + registryV3.evm.bytecode.object };
   }
 
   return result;

@@ -35,13 +35,13 @@ contract EchoMemoryRegistry is
     }
 
     /// @dev user => vault
-    mapping(address => MemoryVault) private vaults;
+    mapping(address => MemoryVault) internal vaults;
 
     /// @dev user => AI tool address => has read access
-    mapping(address => mapping(address => bool)) private accessList;
+    mapping(address => mapping(address => bool)) internal accessList;
 
     /// @dev user => list of AI tool addresses ever granted access (for enumeration in UIs)
-    mapping(address => address[]) private grantedAppsHistory;
+    mapping(address => address[]) internal grantedAppsHistory;
 
     event MemoryUpdated(address indexed user, string cid, bytes32 integrityHash, uint64 updatedAt);
     event AccessGranted(address indexed user, address indexed app);
@@ -72,7 +72,6 @@ contract EchoMemoryRegistry is
      */
     function initialize(address initialOwner) public initializer {
         __Ownable_init(initialOwner);
-        __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
     }
 

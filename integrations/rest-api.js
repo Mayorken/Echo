@@ -177,6 +177,118 @@ function createApp(config) {
     }
   });
 
+  // ── Team Vault routes (V3) ────────────────────────────────────────────────
+  // Switch between personal and team context by calling the /vault/* routes
+  // instead of /context/* and supplying a vaultName. The target address in
+  // integration configs determines which path to use.
+
+  /**
+   * POST /vault/create
+   * Create a new shared team vault with the current signer as owner.
+   * Body: { vaultName: "team-alpha" }
+   */
+  app.post('/vault/create', async (req, res) => {
+    try {
+      const { vaultName } = req.body;
+      if (!vaultName || typeof vaultName !== 'string') {
+        return res.status(400).json({ error: '"vaultName" string is required' });
+      }
+      await client.createVault(vaultName);
+      res.json({ success: true, vault: vaultName });
+    } catch (err) {
+      console.error('POST /vault/create error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  /**
+   * POST /vault/save
+   * Save shared AI context to a team vault.
+   * Body: { vaultName: "team-alpha", context: { ...any JSON... } }
+   */
+  app.post('/vault/save', async (req, res) => {
+    try {
+      const { vaultName, context } = req.body;
+      if (!vaultName || typeof vaultName !== 'string') {
+        return res.status(400).json({ error: '"vaultName" string is required' });
+      }
+      if (!context || typeof context !== 'object') {
+        return res.status(400).json({ error: '"context" object is required' });
+      }
+      const result = await client.saveVaultMemory(vaultName, context, encryptionKey);
+      res.json({ success: true, vault: vaultName, cid: result.cid, integrityHash: result.integrityHash });
+    } catch (err) {
+      console.error('POST /vault/save error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  /**
+   * GET /vault/load/:vaultName
+   * Load and decrypt the shared AI context from a team vault.
+   * Caller must be a current vault member.
+   */
+  app.get('/vault/load/:vaultName', async (req, res) => {
+    try {
+      const { vaultName } = req.params;
+      if (!vaultName) {
+        return res.status(400).json({ error: 'vaultName is required' });
+      }
+      const context = await client.loadVaultMemory(vaultName, encryptionKey);
+      if (context === null) {
+        return res.json({ context: null, message: 'No context stored for this vault' });
+      }
+      res.json({ context });
+    } catch (err) {
+      console.error('GET /vault/load error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  /**
+   * POST /vault/grant
+   * Grant a teammate access to a vault. Only the vault owner can call this.
+   * Body: { vaultName: "team-alpha", memberAddress: "0x..." }
+   */
+  app.post('/vault/grant', async (req, res) => {
+    try {
+      const { vaultName, memberAddress } = req.body;
+      if (!vaultName || typeof vaultName !== 'string') {
+        return res.status(400).json({ error: '"vaultName" string is required' });
+      }
+      if (!memberAddress || !ethers.isAddress(memberAddress)) {
+        return res.status(400).json({ error: 'Valid "memberAddress" is required' });
+      }
+      await client.grantVaultAccess(vaultName, memberAddress);
+      res.json({ success: true, vault: vaultName, granted: memberAddress });
+    } catch (err) {
+      console.error('POST /vault/grant error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  /**
+   * POST /vault/revoke
+   * Revoke a member's access. Only the vault owner can call this.
+   * Body: { vaultName: "team-alpha", memberAddress: "0x..." }
+   */
+  app.post('/vault/revoke', async (req, res) => {
+    try {
+      const { vaultName, memberAddress } = req.body;
+      if (!vaultName || typeof vaultName !== 'string') {
+        return res.status(400).json({ error: '"vaultName" string is required' });
+      }
+      if (!memberAddress || !ethers.isAddress(memberAddress)) {
+        return res.status(400).json({ error: 'Valid "memberAddress" is required' });
+      }
+      await client.revokeVaultAccess(vaultName, memberAddress);
+      res.json({ success: true, vault: vaultName, revoked: memberAddress });
+    } catch (err) {
+      console.error('POST /vault/revoke error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
   return app;
 }
 

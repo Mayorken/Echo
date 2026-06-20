@@ -10,7 +10,7 @@ import "./EchoMemoryRegistry.sol";
  *         behavior. Used by the test suite to exercise the upgrade flow.
  */
 contract EchoMemoryRegistryV2 is EchoMemoryRegistry {
-    function version() external pure returns (uint256) {
+    function version() external pure virtual returns (uint256) {
         return 2;
     }
 }

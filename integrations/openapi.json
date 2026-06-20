@@ -292,6 +292,228 @@
           }
         }
       }
+    },
+
+    "/vault/create": {
+      "post": {
+        "operationId": "createVault",
+        "summary": "Create a new shared team vault",
+        "description": "Creates an on-chain team vault with the caller as owner. Switch between personal context (/context/*) and team context (/vault/*) by changing which routes you call. The vaultName is hashed on-chain to a bytes32 ID — the same name always resolves to the same vault.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["vaultName"],
+                "properties": {
+                  "vaultName": {
+                    "type": "string",
+                    "description": "Human-readable vault name, e.g. 'team-alpha'. Must be consistent across all team members."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vault created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "vault": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid request" },
+          "500": { "description": "Server error (vault may already exist)" }
+        }
+      }
+    },
+
+    "/vault/save": {
+      "post": {
+        "operationId": "saveVaultContext",
+        "summary": "Save shared AI context to a team vault",
+        "description": "Encrypts context client-side, uploads to Filecoin, and records the pointer on-chain. Any current vault member can write. The Keeper sees only ciphertext.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["vaultName", "context"],
+                "properties": {
+                  "vaultName": {
+                    "type": "string",
+                    "description": "Name of the team vault to write to"
+                  },
+                  "context": {
+                    "type": "object",
+                    "description": "The shared context object to save (any JSON-serializable data)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Context saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "vault": { "type": "string" },
+                    "cid": { "type": "string" },
+                    "integrityHash": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid request" },
+          "500": { "description": "Server error or not a vault member" }
+        }
+      }
+    },
+
+    "/vault/load/{vaultName}": {
+      "get": {
+        "operationId": "loadVaultContext",
+        "summary": "Load shared AI context from a team vault",
+        "description": "Fetches encrypted context from Filecoin, decrypts it, and verifies integrity. Caller must be a current vault member.",
+        "parameters": [
+          {
+            "name": "vaultName",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Name of the team vault to read from"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Context loaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "context": { "type": "object", "nullable": true },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "description": "Access denied or server error" }
+        }
+      }
+    },
+
+    "/vault/grant": {
+      "post": {
+        "operationId": "grantVaultAccess",
+        "summary": "Grant a teammate access to a team vault",
+        "description": "Only the vault owner can grant access. After granting, the new member can read and write the vault context.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["vaultName", "memberAddress"],
+                "properties": {
+                  "vaultName": {
+                    "type": "string",
+                    "description": "Name of the team vault"
+                  },
+                  "memberAddress": {
+                    "type": "string",
+                    "description": "Ethereum address of the teammate to add"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access granted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "vault": { "type": "string" },
+                    "granted": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid address" },
+          "500": { "description": "Server error or caller is not vault owner" }
+        }
+      }
+    },
+
+    "/vault/revoke": {
+      "post": {
+        "operationId": "revokeVaultAccess",
+        "summary": "Revoke a member's access to a team vault",
+        "description": "Only the vault owner can revoke access. The owner cannot revoke themselves.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["vaultName", "memberAddress"],
+                "properties": {
+                  "vaultName": {
+                    "type": "string",
+                    "description": "Name of the team vault"
+                  },
+                  "memberAddress": {
+                    "type": "string",
+                    "description": "Ethereum address of the member to remove"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "vault": { "type": "string" },
+                    "revoked": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid address" },
+          "500": { "description": "Server error or caller is not vault owner" }
+        }
+      }
     }
   }
 }

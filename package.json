@@ -8,6 +8,7 @@
     "deploy": "node deploy.js",
     "keeper": "node keeper.js",
     "keeper:once": "node keeper.js --once",
+    "fund": "node tools/funding-bridge.js",
     "test": "mocha test/*.test.js"
   },
   "license": "MIT",

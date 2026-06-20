@@ -40,6 +40,16 @@ const { ethers } = require('ethers');
 const { EchoClient, generateEncryptionKey } = require('../echo-sdk');
 const { createLighthouseStorage } = require('../lib/storage');
 
+// Vault tool names use a consistent prefix so AI tools can filter them
+const VAULT_TOOLS = [
+  'echo_create_vault',
+  'echo_save_vault_context',
+  'echo_load_vault_context',
+  'echo_grant_vault_access',
+  'echo_revoke_vault_access',
+  'echo_has_vault_access',
+];
+
 const TOOL_DEFINITIONS = [
   {
     name: 'echo_save_context',
@@ -146,6 +156,123 @@ const TOOL_DEFINITIONS = [
       properties: {},
     },
   },
+
+  // ── Team Vault tools (V3) ───────────────────────────────────────────────
+  {
+    name: 'echo_create_vault',
+    description:
+      'Create a new shared team vault with the current signer as owner. ' +
+      'The vaultName is a human-readable identifier (e.g. "team-alpha") that is ' +
+      'hashed on-chain to a bytes32 vault ID. Once created, use echo_grant_vault_access ' +
+      'to add teammates. To switch between a personal vault and a team vault, change ' +
+      'which tool you call (echo_save_context vs echo_save_vault_context) and supply ' +
+      'the vaultName. No central server needed — the RBAC lives entirely on-chain.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        vaultName: {
+          type: 'string',
+          description: 'Human-readable vault name, e.g. "team-alpha". Must be consistent across all callers.',
+        },
+      },
+      required: ['vaultName'],
+    },
+  },
+  {
+    name: 'echo_save_vault_context',
+    description:
+      'Save or update the shared AI context for a team vault. Any current vault member ' +
+      'can write. Context is encrypted client-side with the shared encryption key — ' +
+      'the Keeper and any intermediary see only ciphertext.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        vaultName: {
+          type: 'string',
+          description: 'Name of the team vault to write to.',
+        },
+        context: {
+          type: 'object',
+          description: 'The shared context object to save (any JSON-serializable data).',
+        },
+      },
+      required: ['vaultName', 'context'],
+    },
+  },
+  {
+    name: 'echo_load_vault_context',
+    description:
+      'Load and decrypt the shared AI context from a team vault. ' +
+      'Caller must be a current vault member — non-members receive NotAuthorized.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        vaultName: {
+          type: 'string',
+          description: 'Name of the team vault to read from.',
+        },
+      },
+      required: ['vaultName'],
+    },
+  },
+  {
+    name: 'echo_grant_vault_access',
+    description:
+      'Grant a teammate access to a team vault. Only the vault owner can call this. ' +
+      'After granting, the new member can read and write the vault context.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        vaultName: {
+          type: 'string',
+          description: 'Name of the team vault.',
+        },
+        memberAddress: {
+          type: 'string',
+          description: 'Ethereum address of the teammate to add.',
+        },
+      },
+      required: ['vaultName', 'memberAddress'],
+    },
+  },
+  {
+    name: 'echo_revoke_vault_access',
+    description:
+      'Revoke a member\'s access to a team vault. Only the vault owner can call this. ' +
+      'The owner cannot revoke themselves.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        vaultName: {
+          type: 'string',
+          description: 'Name of the team vault.',
+        },
+        memberAddress: {
+          type: 'string',
+          description: 'Ethereum address of the member to remove.',
+        },
+      },
+      required: ['vaultName', 'memberAddress'],
+    },
+  },
+  {
+    name: 'echo_has_vault_access',
+    description: 'Check whether an address is currently a member of a team vault.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        vaultName: {
+          type: 'string',
+          description: 'Name of the team vault.',
+        },
+        memberAddress: {
+          type: 'string',
+          description: 'Ethereum address to check.',
+        },
+      },
+      required: ['vaultName', 'memberAddress'],
+    },
+  },
 ];
 
 function createMcpHandler(config) {
@@ -201,6 +328,54 @@ function createMcpHandler(config) {
         const hex = Buffer.from(key).toString('hex');
         return { content: [{ type: 'text', text: JSON.stringify({ key: hex }) }] };
       }
+
+      // ── Team Vault handlers (V3) ─────────────────────────────────────────
+      case 'echo_create_vault': {
+        if (!args.vaultName || typeof args.vaultName !== 'string') {
+          throw new Error('vaultName is required');
+        }
+        await client.createVault(args.vaultName);
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, vault: args.vaultName }) }] };
+      }
+      case 'echo_save_vault_context': {
+        if (!args.vaultName || typeof args.vaultName !== 'string') {
+          throw new Error('vaultName is required');
+        }
+        if (!args.context || typeof args.context !== 'object') {
+          throw new Error('context must be an object');
+        }
+        const result = await client.saveVaultMemory(args.vaultName, args.context, encryptionKey);
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, vault: args.vaultName, cid: result.cid, integrityHash: result.integrityHash }) }] };
+      }
+      case 'echo_load_vault_context': {
+        if (!args.vaultName || typeof args.vaultName !== 'string') {
+          throw new Error('vaultName is required');
+        }
+        const context = await client.loadVaultMemory(args.vaultName, encryptionKey);
+        if (context === null) {
+          return { content: [{ type: 'text', text: JSON.stringify({ context: null, message: 'No context stored for this vault' }) }] };
+        }
+        return { content: [{ type: 'text', text: JSON.stringify({ context }) }] };
+      }
+      case 'echo_grant_vault_access': {
+        if (!args.vaultName || typeof args.vaultName !== 'string') throw new Error('vaultName is required');
+        if (!args.memberAddress || !ethers.isAddress(args.memberAddress)) throw new Error('Valid memberAddress is required');
+        await client.grantVaultAccess(args.vaultName, args.memberAddress);
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, vault: args.vaultName, granted: args.memberAddress }) }] };
+      }
+      case 'echo_revoke_vault_access': {
+        if (!args.vaultName || typeof args.vaultName !== 'string') throw new Error('vaultName is required');
+        if (!args.memberAddress || !ethers.isAddress(args.memberAddress)) throw new Error('Valid memberAddress is required');
+        await client.revokeVaultAccess(args.vaultName, args.memberAddress);
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, vault: args.vaultName, revoked: args.memberAddress }) }] };
+      }
+      case 'echo_has_vault_access': {
+        if (!args.vaultName || typeof args.vaultName !== 'string') throw new Error('vaultName is required');
+        if (!args.memberAddress || !ethers.isAddress(args.memberAddress)) throw new Error('Valid memberAddress is required');
+        const hasAccess = await client.hasVaultAccess(args.vaultName, args.memberAddress);
+        return { content: [{ type: 'text', text: JSON.stringify({ vault: args.vaultName, member: args.memberAddress, hasAccess }) }] };
+      }
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
