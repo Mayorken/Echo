@@ -6,6 +6,7 @@
   "scripts": {
     "demo": "node demo.js",
     "smoke": "node tools/smoke-test.js",
+    "get-key": "node tools/get-lighthouse-key.js",
     "compile": "node compile.js",
     "deploy": "node deploy.js",
     "keeper": "node keeper.js",
