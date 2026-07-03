@@ -6,10 +6,10 @@
  * Environment variables:
  *   RPC_URL              — FEVM RPC endpoint (e.g. Calibration testnet)
  *   CONTRACT_ADDRESS     — Deployed EchoMemoryRegistry proxy address
- *   LIGHTHOUSE_API_KEY   — Lighthouse API key for re-pinning
+ *   SYNAPSE_PRIVATE_KEY  — Private key for Synapse storage operations (re-pinning)
  *   KEEPER_INTERVAL_MS   — Milliseconds between sweeps (default: 3600000 = 1 hour)
  *   KEEPER_FROM_BLOCK    — Block number to start scanning from (default: 0)
- *   KEEPER_GATEWAY       — IPFS gateway URL (default: Lighthouse public gateway)
+ *   SYNAPSE_CHAIN        — 'mainnet' or 'calibration' (default: 'calibration')
  *
  * Usage:
  *   # One-time sweep:
@@ -25,10 +25,10 @@ const { runSweep, startKeeper } = require('./keeper/index');
 const config = {
   rpcUrl: process.env.RPC_URL,
   contractAddress: process.env.CONTRACT_ADDRESS,
-  lighthouseApiKey: process.env.LIGHTHOUSE_API_KEY,
+  synapsePrivateKey: process.env.SYNAPSE_PRIVATE_KEY,
   intervalMs: Number(process.env.KEEPER_INTERVAL_MS) || 3600000,
   fromBlock: Number(process.env.KEEPER_FROM_BLOCK) || 0,
-  gateway: process.env.KEEPER_GATEWAY || undefined,
+  chain: process.env.SYNAPSE_CHAIN || 'calibration',
 };
 
 if (!config.rpcUrl) {
@@ -39,8 +39,8 @@ if (!config.contractAddress) {
   console.error('Error: CONTRACT_ADDRESS environment variable is required');
   process.exit(1);
 }
-if (!config.lighthouseApiKey) {
-  console.error('Error: LIGHTHOUSE_API_KEY environment variable is required');
+if (!config.synapsePrivateKey) {
+  console.error('Error: SYNAPSE_PRIVATE_KEY environment variable is required');
   process.exit(1);
 }
 

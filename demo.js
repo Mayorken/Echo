@@ -4,7 +4,7 @@
  *
  * Runs entirely locally: Ganache in-process chain, compiled V3 contract,
  * real AES-256-GCM encryption, in-memory storage stand-in.
- * No Lighthouse key, no FEVM RPC, no wallet needed.
+ * No Synapse key, no FEVM RPC, no wallet needed.
  *
  *   node demo.js
  */
@@ -36,7 +36,7 @@ const ok   = (t) => console.log(`  ${C.green}✓${C.reset}  ${t}`);
 const info = (t) => console.log(`  ${C.blue}ℹ${C.reset}  ${t}`);
 const kv   = (k, v) => console.log(`  ${C.dim}${k.padEnd(22)}${C.reset}${C.white}${v}${C.reset}`);
 
-// ── in-memory storage adapter (replaces Lighthouse for the demo) ─────────────
+// ── in-memory storage adapter (replaces Synapse for the demo) ─────────────
 function createMemoryStorage() {
   const store = new Map();
   return {
@@ -106,7 +106,7 @@ async function main() {
     decisions: [
       'Using UUPS proxy for upgradability',
       'AES-256-GCM for client-side encryption',
-      'Lighthouse for Filecoin storage',
+      'Synapse SDK for Filecoin storage',
     ],
     preferences: { codeStyle: 'functional', testFramework: 'Mocha/Chai' },
   };
@@ -164,7 +164,7 @@ async function main() {
   const teamContext = {
     sprint: 'Sprint-7',
     goal: 'Ship Echo V3 to Calibration testnet',
-    blockers: ['Need FEVM RPC endpoint', 'Lighthouse API key for mainnet'],
+    blockers: ['Need FEVM RPC endpoint', 'Synapse wallet for mainnet'],
     sharedDecisions: ['Keep all RBAC on-chain, no central server'],
   };
   await aliceClient.saveVaultMemory(vaultName, teamContext, sharedKey);
