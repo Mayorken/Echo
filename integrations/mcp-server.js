@@ -33,6 +33,7 @@
  *   CONTRACT_ADDRESS   — Deployed EchoMemoryRegistry proxy address
  *   PRIVATE_KEY        — Wallet private key for signing transactions
  *   SYNAPSE_PRIVATE_KEY — Private key for Synapse SDK Filecoin storage
+ *   SYNAPSE_CHAIN      — 'mainnet' or 'calibration' (default: 'calibration')
  *   ENCRYPTION_KEY     — Hex-encoded 32-byte encryption key
  */
 
@@ -400,7 +401,9 @@ async function startStdioServer() {
 
   const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
   const signer = new ethers.Wallet(privateKey, provider);
-  const storage = await createSynapseStorage(synapsePrivateKey);
+  const storage = await createSynapseStorage(synapsePrivateKey, {
+    chain: process.env.SYNAPSE_CHAIN || 'calibration',
+  });
 
   let encryptionKey;
   if (encryptionKeyHex) {
