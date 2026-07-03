@@ -499,7 +499,10 @@ async function handleMessage(line, handleToolCall) {
 }
 
 if (require.main === module) {
-  startStdioServer();
+  startStdioServer().catch((err) => {
+    process.stderr.write(`Fatal startup error: ${err.message}\n`);
+    process.exit(1);
+  });
 }
 
 module.exports = { createMcpHandler, handleMessage, TOOL_DEFINITIONS };

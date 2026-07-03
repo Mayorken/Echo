@@ -11,6 +11,7 @@ describe('keeper/renewer.js', function () {
       };
       const result = await checkStorageStatus('bafk-test-cid', fakeSynapse);
       expect(result.status).to.equal('active');
+      expect(result.data).to.deep.equal(new Uint8Array([1, 2, 3]));
     });
 
     it('returns "not-found" when download throws "not found"', async function () {
@@ -22,6 +23,7 @@ describe('keeper/renewer.js', function () {
       const result = await checkStorageStatus('bafk-missing', fakeSynapse);
       expect(result.status).to.equal('not-found');
       expect(result.copies).to.equal(0);
+      expect(result.data).to.equal(null);
     });
 
     it('returns "not-found" when download returns null', async function () {
@@ -32,6 +34,7 @@ describe('keeper/renewer.js', function () {
       };
       const result = await checkStorageStatus('bafk-null', fakeSynapse);
       expect(result.status).to.equal('not-found');
+      expect(result.data).to.equal(null);
     });
 
     it('returns "error" when download throws a non-"not found" error', async function () {
@@ -47,14 +50,33 @@ describe('keeper/renewer.js', function () {
   });
 
   describe('repinData', function () {
-    it('downloads and re-uploads data via Synapse', async function () {
+    it('re-uploads pre-fetched data without re-downloading', async function () {
+      const testData = new Uint8Array([10, 20, 30]);
+      let downloadCalled = false;
+      const fakeSynapse = {
+        storage: {
+          download: async () => { downloadCalled = true; return testData; },
+          prepare: async () => ({ transaction: null }),
+          upload: async (data) => {
+            expect(data).to.deep.equal(testData);
+            return { pieceCid: 'bafk-new-cid', size: 3, complete: true, copies: [1, 2] };
+          },
+        },
+      };
+
+      const result = await repinData('bafk-old-cid', fakeSynapse, testData);
+      expect(result.success).to.equal(true);
+      expect(result.newPieceCid).to.equal('bafk-new-cid');
+      expect(downloadCalled).to.equal(false);
+    });
+
+    it('falls back to download when no pre-fetched data provided', async function () {
       const testData = new Uint8Array([10, 20, 30]);
       const fakeSynapse = {
         storage: {
           download: async () => testData,
           prepare: async () => ({ transaction: null }),
           upload: async (data) => {
-            expect(data).to.deep.equal(testData);
             return { pieceCid: 'bafk-new-cid', size: 3, complete: true, copies: [1, 2] };
           },
         },
@@ -67,9 +89,9 @@ describe('keeper/renewer.js', function () {
 
     it('executes prepare transaction when needed', async function () {
       let prepareExecuted = false;
+      const existingData = new Uint8Array([1]);
       const fakeSynapse = {
         storage: {
-          download: async () => new Uint8Array([1]),
           prepare: async () => ({
             transaction: { execute: async () => { prepareExecuted = true; return { hash: '0x123' }; } },
           }),
@@ -77,7 +99,7 @@ describe('keeper/renewer.js', function () {
         },
       };
 
-      const result = await repinData('bafk-test', fakeSynapse);
+      const result = await repinData('bafk-test', fakeSynapse, existingData);
       expect(result.success).to.equal(true);
       expect(prepareExecuted).to.equal(true);
     });
@@ -95,15 +117,15 @@ describe('keeper/renewer.js', function () {
     });
 
     it('returns error when upload returns no pieceCid', async function () {
+      const existingData = new Uint8Array([1]);
       const fakeSynapse = {
         storage: {
-          download: async () => new Uint8Array([1]),
           prepare: async () => ({ transaction: null }),
           upload: async () => ({}),
         },
       };
 
-      const result = await repinData('bafk-test', fakeSynapse);
+      const result = await repinData('bafk-test', fakeSynapse, existingData);
       expect(result.success).to.equal(false);
       expect(result.error).to.include('no pieceCid');
     });

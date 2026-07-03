@@ -329,7 +329,10 @@ async function startServer() {
 }
 
 if (require.main === module) {
-  startServer();
+  startServer().catch((err) => {
+    console.error(`Fatal startup error: ${err.message}`);
+    process.exit(1);
+  });
 }
 
 module.exports = { createApp };

@@ -52,17 +52,21 @@ async function createKeeperSynapse(privateKey, options) {
 /**
  * Check the storage status for a pieceCid via Synapse.
  *
+ * When the data is downloadable the returned object includes a `data` field
+ * with the bytes. The keeper passes this to `repinData` so it can re-upload
+ * without a second download — and for the 'not-found' case a re-download
+ * from the same source would fail anyway.
+ *
  * Status values returned:
- * - 'active':  data is stored with healthy copies
- * - 'degraded': data exists but has fewer copies than expected
+ * - 'active':    data is stored with healthy copies
  * - 'not-found': pieceCid not found in Synapse storage
- * - 'error':   could not determine status
+ * - 'error':     could not determine status
  *
  * @param {string} pieceCid
  * @param {object} synapse Synapse SDK instance
  * @param {object} [options]
  * @param {number} [options.minCopies=2] Minimum healthy copies expected
- * @returns {Promise<{status: string, copies: number, error: string|null}>}
+ * @returns {Promise<{status: string, copies: number, error: string|null, data: Uint8Array|null}>}
  */
 async function checkStorageStatus(pieceCid, synapse, options) {
   const minCopies = (options && options.minCopies) || 2;
@@ -70,29 +74,37 @@ async function checkStorageStatus(pieceCid, synapse, options) {
   try {
     const result = await synapse.storage.download({ pieceCid });
     if (!result) {
-      return { status: 'not-found', copies: 0, error: null };
+      return { status: 'not-found', copies: 0, error: null, data: null };
     }
-    return { status: 'active', copies: minCopies, error: null };
+    return { status: 'active', copies: minCopies, error: null, data: new Uint8Array(result) };
   } catch (err) {
     if (err.message && err.message.includes('not found')) {
-      return { status: 'not-found', copies: 0, error: null };
+      return { status: 'not-found', copies: 0, error: null, data: null };
     }
-    return { status: 'error', copies: 0, error: err.message };
+    return { status: 'error', copies: 0, error: err.message, data: null };
   }
 }
 
 /**
- * Re-pin data by downloading it and re-uploading via Synapse.
+ * Re-pin data by uploading it to Synapse. Accepts pre-fetched data from
+ * `checkStorageStatus` to avoid a redundant download. If `existingData` is
+ * null the function attempts a fresh download, but this will likely fail
+ * for the 'not-found' case since both operations hit the same source.
  *
  * @param {string} pieceCid
  * @param {object} synapse Synapse SDK instance
+ * @param {Uint8Array|null} [existingData] Data already fetched by checkStorageStatus
  * @returns {Promise<{success: boolean, newPieceCid: string|null, error: string|null}>}
  */
-async function repinData(pieceCid, synapse) {
+async function repinData(pieceCid, synapse, existingData) {
   try {
-    const data = await synapse.storage.download({ pieceCid });
+    let data = existingData || null;
     if (!data) {
-      return { success: false, newPieceCid: null, error: 'Download returned no data' };
+      const downloaded = await synapse.storage.download({ pieceCid });
+      if (!downloaded) {
+        return { success: false, newPieceCid: null, error: 'Download returned no data' };
+      }
+      data = new Uint8Array(downloaded);
     }
 
     const prep = await synapse.storage.prepare({

@@ -96,8 +96,15 @@ async function runSweep(config) {
       continue;
     }
 
+    if (storageCheck.status === 'not-found' && !storageCheck.data) {
+      errors++;
+      log(`[keeper]   Data not found in Synapse — cannot re-pin (data is not recoverable from same source)`);
+      results.push({ user, cid, action: 'error', error: 'Data not found — cannot re-pin from same storage source', storageStatus: 'not-found' });
+      continue;
+    }
+
     log(`[keeper]   Storage status: ${storageCheck.status} — attempting re-pin`);
-    const repin = await repinData(cid, synapse);
+    const repin = await repinData(cid, synapse, storageCheck.data);
 
     if (!repin.success) {
       errors++;
