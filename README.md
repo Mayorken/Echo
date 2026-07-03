@@ -64,10 +64,10 @@ they authorize.
 - **`lib/crypto.js`** — real AES-256-GCM: Web Crypto API in-browser (where
   this actually runs), Node's `crypto` module as a fallback so the file is
   testable directly in Node.
-- **`lib/storage.js`** — Lighthouse storage adapter. Implements the
+- **`lib/storage.js`** — Synapse SDK storage adapter. Implements the
   `put(bytes)->cid` / `get(cid)->bytes` interface EchoClient expects, backed
-  by real Filecoin storage via [Lighthouse](https://lighthouse.storage).
-  Upload via `uploadBuffer`, retrieval via IPFS gateway.
+  by real Filecoin storage via the [Synapse SDK](https://docs.filecoin.cloud).
+  Upload via `storage.upload`, retrieval via `storage.download`.
 - **`index.html`** — an interactive demo showing a developer switching between
   Codex, Claude, and Gemini mid-project with zero context loss — the core
   portability scenario in action.
@@ -81,7 +81,7 @@ they authorize.
   decryption keys, revoked access, and renewal funding.
 - **`keeper/`** — auto-renewal keeper bot. `scanner.js` finds funded vaults
   via contract events, `renewer.js` checks deal status and re-pins via
-  Lighthouse, `index.js` orchestrates periodic sweeps. `keeper.js` is the
+  the Synapse SDK, `index.js` orchestrates periodic sweeps. `keeper.js` is the
   CLI entry point.
 - **`integrations/`** — AI platform integration adapters:
   - `rest-api.js` — Express HTTP API wrapping all Echo SDK operations.
@@ -163,9 +163,9 @@ write data, upgrade to V2, verify all storage is intact and `version()` returns 
 Shared context for engineering teams — on-chain RBAC, no central server.
 
 ```javascript
-const { EchoClient, generateEncryptionKey, createLighthouseStorage } = require('./echo-sdk');
+const { EchoClient, generateEncryptionKey, createSynapseStorage } = require('./echo-sdk');
 
-const storage = createLighthouseStorage(process.env.LIGHTHOUSE_API_KEY);
+const storage = await createSynapseStorage(process.env.SYNAPSE_PRIVATE_KEY);
 const client = new EchoClient(rpcUrl, contractAddress, ownerSigner, storage);
 const sharedKey = await generateEncryptionKey(); // share with team out-of-band
 
@@ -235,7 +235,7 @@ Filecoin storage deal is expiring or missing.
 # One-time sweep:
 RPC_URL=https://api.calibration.node.glif.io/rpc/v1 \
 CONTRACT_ADDRESS=0x... \
-LIGHTHOUSE_API_KEY=your-key \
+SYNAPSE_PRIVATE_KEY=0x... \
 node keeper.js --once
 
 # Long-running daemon (sweeps every hour by default):
@@ -245,10 +245,10 @@ node keeper.js
 **How it works:**
 1. `keeper/scanner.js` scans `MemoryUpdated` events to find vaults with both
    a CID and a non-zero `renewalBalance`
-2. `keeper/renewer.js` checks each CID's Filecoin deal status via
-   `lighthouse.dealStatus` — classifies as `active`, `expiring`, or `no-deal`
-3. For expiring or missing deals, it re-pins by fetching the data from the
-   IPFS gateway and re-uploading via `lighthouse.uploadBuffer`
+2. `keeper/renewer.js` checks each CID's storage status via the Synapse SDK —
+   classifies as `active`, `not-found`, or `error`
+3. For missing or degraded data, it re-pins by downloading and re-uploading
+   via the Synapse SDK
 
 **Environment variables:**
 
@@ -256,21 +256,21 @@ node keeper.js
 |---|---|---|
 | `RPC_URL` | Yes | FEVM RPC endpoint |
 | `CONTRACT_ADDRESS` | Yes | EchoMemoryRegistry proxy address |
-| `LIGHTHOUSE_API_KEY` | Yes | Lighthouse API key for re-pinning |
+| `SYNAPSE_PRIVATE_KEY` | Yes | Private key for Synapse SDK storage operations |
 | `KEEPER_PRIVATE_KEY` | No | Keeper's wallet key — enables on-chain reimbursement via `keeperDeductRenewal()`. Without it the keeper runs in observation mode (re-pins but doesn't deduct). |
 | `KEEPER_FEE_WEI` | No | Fee per successful re-pin in wei (default: 10000000000000000 = 0.01 FIL). Must be ≤ 1 FIL or the keeper refuses to start. |
 | `KEEPER_INTERVAL_MS` | No | Sweep interval in ms (default: 3600000 = 1 hour) |
 | `KEEPER_FROM_BLOCK` | No | Block to start scanning from (default: 0) |
-| `KEEPER_GATEWAY` | No | Custom IPFS gateway URL |
+| `SYNAPSE_CHAIN` | No | `mainnet` or `calibration` (default: `calibration`) |
 
-## Using real Filecoin storage (Lighthouse)
+## Using real Filecoin storage (Synapse SDK)
 
-The SDK ships with a Lighthouse adapter for real Filecoin storage:
+The SDK ships with a [Synapse SDK](https://docs.filecoin.cloud) adapter for real Filecoin storage:
 
 ```javascript
-const { EchoClient, generateEncryptionKey, createLighthouseStorage } = require('./echo-sdk');
+const { EchoClient, generateEncryptionKey, createSynapseStorage } = require('./echo-sdk');
 
-const storage = createLighthouseStorage(process.env.LIGHTHOUSE_API_KEY);
+const storage = await createSynapseStorage(process.env.SYNAPSE_PRIVATE_KEY);
 const client  = new EchoClient(rpcUrl, contractAddress, signer, storage);
 
 // Now saveMemory/loadMemory use real Filecoin storage
@@ -278,8 +278,12 @@ const key = await generateEncryptionKey();
 await client.saveMemory({ stack: ['Go', 'PostgreSQL'], task: 'listing endpoint' }, key);
 ```
 
-Get a free API key at [files.lighthouse.storage](https://files.lighthouse.storage).
-Premium users can pass a custom gateway: `createLighthouseStorage(key, { gateway: 'https://your-gateway.io/ipfs' })`.
+The wallet behind `SYNAPSE_PRIVATE_KEY` must be funded with FIL (gas) and USDFC
+(storage payments). On testnet, get tFIL from the
+[Calibration Faucet](https://faucet.calibnet.chainsafe-fil.io) and tUSDFC from the
+[USDFC Faucet](https://docs.filecoin.cloud/getting-started/).
+
+Options: `createSynapseStorage(key, { chain: 'mainnet', withCDN: true })`.
 
 ## Live deployment (Calibration testnet)
 
@@ -296,7 +300,7 @@ EchoMemoryRegistryV3 is deployed and verified on Filecoin Calibration testnet:
 ## Quickstart
 
 ```bash
-cp .env.example .env   # fill in PRIVATE_KEY and LIGHTHOUSE_API_KEY
+cp .env.example .env   # fill in PRIVATE_KEY and SYNAPSE_PRIVATE_KEY
 npm install
 npm run smoke          # verify the live contract (no FIL spent)
 npm run demo           # full local demo on Ganache (no external deps)
@@ -336,7 +340,7 @@ Gemini, or any AI tool with HTTP capabilities.
 RPC_URL=https://api.calibration.node.glif.io/rpc/v1 \
 CONTRACT_ADDRESS=0x... \
 PRIVATE_KEY=0x... \
-LIGHTHOUSE_API_KEY=your-key \
+SYNAPSE_PRIVATE_KEY=0x... \
 ENCRYPTION_KEY=hex-encoded-32-byte-key \
 node integrations/rest-api.js
 ```
@@ -365,7 +369,7 @@ Add Echo as an MCP tool server in `~/.claude/claude_desktop_config.json`:
         "RPC_URL": "https://api.calibration.node.glif.io/rpc/v1",
         "CONTRACT_ADDRESS": "0x962C42f208d89D5bF1698E3397BC78176D70cE0c",
         "PRIVATE_KEY": "0x_your_key",
-        "LIGHTHOUSE_API_KEY": "your-key",
+        "SYNAPSE_PRIVATE_KEY": "0x_your_synapse_key",
         "ENCRYPTION_KEY": "hex-encoded-32-byte-key"
       }
     }
@@ -387,18 +391,18 @@ plus the V3 vault tools: `echo_create_vault`, `echo_save_vault_context`,
 | `RPC_URL` | Yes | FEVM RPC endpoint |
 | `CONTRACT_ADDRESS` | Yes | EchoMemoryRegistry proxy address |
 | `PRIVATE_KEY` | Yes | Wallet private key for signing txs |
-| `LIGHTHOUSE_API_KEY` | Yes | Lighthouse API key for Filecoin storage |
+| `SYNAPSE_PRIVATE_KEY` | Yes | Private key for Synapse SDK Filecoin storage |
 | `ENCRYPTION_KEY` | No | Hex-encoded 32-byte key (generated if omitted) |
 | `PORT` | No | REST API port (default: 3000) |
 
 ## Suggested next steps for a real build
 
 1. ~~Wire the `storage` adapter to an actual Filecoin upload/retrieval SDK.~~
-   **Done** — `lib/storage.js` uses Lighthouse.
+   **Done** — `lib/storage.js` uses the Synapse SDK.
 2. ~~Add an upgradability pattern (UUPS proxy).~~
    **Done** — contract is now UUPS-upgradeable via OpenZeppelin v5.
 3. ~~Build the auto-renewal keeper.~~
-   **Done** — `keeper/` monitors funded vaults and re-pins expiring CIDs via Lighthouse.
+   **Done** — `keeper/` monitors funded vaults and re-pins CIDs via the Synapse SDK.
 4. ~~Build the first AI platform integration.~~
    **Done** — REST API, MCP server for Claude Desktop, and OpenAPI spec for ChatGPT Actions.
 5. ~~Get a real audit before this touches real user data or real FIL at scale.~~

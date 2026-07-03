@@ -52,7 +52,7 @@ No critical or high severity issues were found. All medium and low findings have
 
 **Description:** `config.keeperFeeWei` was read from the environment without validation. A typo (e.g. extra zeros) could produce a fee larger than any user's balance. The contract would reject such a deduction, but the keeper would log errors on every vault and confuse operators into thinking the contract was broken.
 
-**Fix:** Added a startup check that throws if `keeperFeeWei > 1 FIL`, with an explicit error message pointing to the misconfiguration. The threshold is intentionally conservative — legitimate fees for Lighthouse re-pinning are measured in milliwei, not whole FIL.
+**Fix:** Added a startup check that throws if `keeperFeeWei > 1 FIL`, with an explicit error message pointing to the misconfiguration. The threshold is intentionally conservative — legitimate fees for Synapse re-pinning are measured in milliwei, not whole FIL.
 
 ---
 
@@ -142,6 +142,6 @@ Combined with the inherited `nonReentrant` modifier, reentrancy into `keeperDedu
 ## Scope exclusions
 
 - **V1 contract logic** — covered by the Devin V1 audit
-- **Lighthouse SDK / IPFS gateway** — third-party, out of scope
+- **Synapse SDK / Filecoin storage** — third-party, out of scope
 - **Web3Auth library internals** — third-party, out of scope
 - **Stripe API security** — third-party, out of scope

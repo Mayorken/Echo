@@ -21,7 +21,7 @@
  *           "RPC_URL": "https://api.calibration.node.glif.io/rpc/v1",
  *           "CONTRACT_ADDRESS": "0x...",
  *           "PRIVATE_KEY": "0x...",
- *           "LIGHTHOUSE_API_KEY": "...",
+ *           "SYNAPSE_PRIVATE_KEY": "0x...",
  *           "ENCRYPTION_KEY": "..."
  *         }
  *       }
@@ -32,14 +32,14 @@
  *   RPC_URL            — FEVM RPC endpoint
  *   CONTRACT_ADDRESS   — Deployed EchoMemoryRegistry proxy address
  *   PRIVATE_KEY        — Wallet private key for signing transactions
- *   LIGHTHOUSE_API_KEY — Lighthouse API key for Filecoin storage
+ *   SYNAPSE_PRIVATE_KEY — Private key for Synapse SDK Filecoin storage
  *   ENCRYPTION_KEY     — Hex-encoded 32-byte encryption key
  */
 
 require('dotenv').config();
 const { ethers } = require('ethers');
 const { EchoClient, generateEncryptionKey } = require('../echo-sdk');
-const { createLighthouseStorage } = require('../lib/storage');
+const { createSynapseStorage } = require('../lib/storage');
 
 // Vault tool names use a consistent prefix so AI tools can filter them
 const VAULT_TOOLS = [
@@ -383,21 +383,21 @@ function createMcpHandler(config) {
   };
 }
 
-function startStdioServer() {
+async function startStdioServer() {
   const rpcUrl = process.env.RPC_URL;
   const contractAddress = process.env.CONTRACT_ADDRESS;
   const privateKey = process.env.PRIVATE_KEY;
-  const lighthouseApiKey = process.env.LIGHTHOUSE_API_KEY;
+  const synapsePrivateKey = process.env.SYNAPSE_PRIVATE_KEY;
   const encryptionKeyHex = process.env.ENCRYPTION_KEY;
 
-  if (!rpcUrl || !contractAddress || !privateKey || !lighthouseApiKey) {
-    process.stderr.write('Error: RPC_URL, CONTRACT_ADDRESS, PRIVATE_KEY, and LIGHTHOUSE_API_KEY are required\n');
+  if (!rpcUrl || !contractAddress || !privateKey || !synapsePrivateKey) {
+    process.stderr.write('Error: RPC_URL, CONTRACT_ADDRESS, PRIVATE_KEY, and SYNAPSE_PRIVATE_KEY are required\n');
     process.exit(1);
   }
 
   const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
   const signer = new ethers.Wallet(privateKey, provider);
-  const storage = createLighthouseStorage(lighthouseApiKey);
+  const storage = await createSynapseStorage(synapsePrivateKey);
 
   let encryptionKey;
   if (encryptionKeyHex) {

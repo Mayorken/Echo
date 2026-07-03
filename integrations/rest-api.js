@@ -13,7 +13,7 @@
  *   RPC_URL            — FEVM RPC endpoint
  *   CONTRACT_ADDRESS   — Deployed EchoMemoryRegistry proxy address
  *   PRIVATE_KEY        — Wallet private key for signing transactions
- *   LIGHTHOUSE_API_KEY — Lighthouse API key for Filecoin storage
+ *   SYNAPSE_PRIVATE_KEY — Private key for Synapse SDK Filecoin storage
  *   ENCRYPTION_KEY     — Hex-encoded 32-byte encryption key (or generate one)
  *   PORT               — Server port (default: 3000)
  */
@@ -25,7 +25,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const { ethers } = require('ethers');
 const { EchoClient, generateEncryptionKey } = require('../echo-sdk');
-const { createLighthouseStorage } = require('../lib/storage');
+const { createSynapseStorage } = require('../lib/storage');
 
 function createApp(config) {
   const {
@@ -293,22 +293,22 @@ function createApp(config) {
   return app;
 }
 
-function startServer() {
+async function startServer() {
   const rpcUrl = process.env.RPC_URL;
   const contractAddress = process.env.CONTRACT_ADDRESS;
   const privateKey = process.env.PRIVATE_KEY;
-  const lighthouseApiKey = process.env.LIGHTHOUSE_API_KEY;
+  const synapsePrivateKey = process.env.SYNAPSE_PRIVATE_KEY;
   const encryptionKeyHex = process.env.ENCRYPTION_KEY;
   const port = Number(process.env.PORT) || 3000;
 
   if (!rpcUrl) { console.error('Error: RPC_URL required'); process.exit(1); }
   if (!contractAddress) { console.error('Error: CONTRACT_ADDRESS required'); process.exit(1); }
   if (!privateKey) { console.error('Error: PRIVATE_KEY required'); process.exit(1); }
-  if (!lighthouseApiKey) { console.error('Error: LIGHTHOUSE_API_KEY required'); process.exit(1); }
+  if (!synapsePrivateKey) { console.error('Error: SYNAPSE_PRIVATE_KEY required'); process.exit(1); }
 
   const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
   const signer = new ethers.Wallet(privateKey, provider);
-  const storage = createLighthouseStorage(lighthouseApiKey);
+  const storage = await createSynapseStorage(synapsePrivateKey);
 
   let encryptionKey;
   if (encryptionKeyHex) {

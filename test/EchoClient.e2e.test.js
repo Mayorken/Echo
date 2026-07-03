@@ -7,7 +7,7 @@ const { deployProxy } = require('./proxy-helper');
 
 /**
  * A minimal in-memory stand-in for a real Filecoin storage adapter (Synapse
- * SDK / web3.storage / Lighthouse). Implements the same put(bytes)->cid and
+ * SDK). Implements the same put(bytes)->cid and
  * get(cid)->bytes contract the real EchoClient expects, so this test
  * exercises the actual save/load code path end-to-end without needing
  * network access to a live storage gateway.

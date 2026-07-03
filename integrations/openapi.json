@@ -39,7 +39,7 @@
       "post": {
         "operationId": "saveContext",
         "summary": "Save or update the user's AI context",
-        "description": "Encrypts the context client-side, uploads to Filecoin via Lighthouse, and records the CID + integrity hash on-chain.",
+        "description": "Encrypts the context client-side, uploads to Filecoin via the Synapse SDK, and records the CID + integrity hash on-chain.",
         "requestBody": {
           "required": true,
           "content": {

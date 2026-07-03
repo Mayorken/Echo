@@ -41,7 +41,7 @@ hold hostage.
 The architecture is simple:
 
 1. A user's context is encrypted on their device (AES-256-GCM) and stored on
-   Filecoin via Lighthouse
+   Filecoin via the Synapse SDK
 2. A smart contract on FEVM holds the CID pointer and access list — the user
    controls which AI tools can read their context
 3. Any AI tool with the right ABI and a granted address can call `getMemory()`
@@ -64,7 +64,7 @@ Echo is not a sketch. Every component below is deployed and working:
 | Team Vaults — on-chain RBAC shared context for engineering teams | Complete |
 | Keeper spend path — `keeperDeductRenewal()`, CEI + nonReentrant | Complete |
 | `echo-sdk.js` — JavaScript SDK with real AES-256-GCM encryption | Complete |
-| Lighthouse storage adapter — real Filecoin deals on every `saveMemory()` | Complete |
+| Synapse SDK storage adapter — real Filecoin deals on every `saveMemory()` | Complete |
 | Auto-renewal keeper bot — scans events, checks deal status, re-pins | Complete |
 | REST API — 13 endpoints, rate-limited, helmet-hardened | Complete |
 | MCP server — 13 tools for Claude Desktop (stdio JSON-RPC transport) | Complete |
@@ -133,7 +133,7 @@ This grant funds four concrete deliverables:
 - Transfer contract ownership to a Gnosis Safe multisig (removes single-key
   admin risk)
 - Verify contract source code on Filfox block explorer
-- Deploy keeper daemon on mainnet, pointed at Lighthouse mainnet storage
+- Deploy keeper daemon on mainnet, pointed at Synapse mainnet storage
 
 ### Deliverable 2: Hosted Gateway MVP
 
@@ -184,7 +184,7 @@ without self-hosting anything:
 | Mainnet contract deployment | `npm run deploy` against mainnet RPC; verify addresses |
 | Gnosis Safe setup | Deploy Safe on FEVM mainnet; `transferOwnership()` to Safe address |
 | Contract verification | Submit source to Filfox; confirm bytecode match |
-| Lighthouse mainnet key | `npm run get-key` against mainnet wallet; configure keeper |
+| Synapse mainnet wallet | Fund wallet with FIL + USDFC; configure keeper with `SYNAPSE_PRIVATE_KEY` |
 | Keeper mainnet launch | Deploy keeper daemon; confirm first sweep runs cleanly |
 
 **Verifiable completion criteria:**
@@ -298,7 +298,7 @@ Hosting costs and tooling are included.
   `EchoMemoryRegistryV3.sol`, `echo-sdk.js`, keeper bot, REST API, MCP server,
   OpenAPI spec, funding bridge, and security audit
 - Hands-on across Solidity, JavaScript/Node.js, ethers.js v6, Filecoin FEVM,
-  Lighthouse storage, and MCP protocol
+  Synapse SDK storage, and MCP protocol
 - Repository: https://github.com/Mayorken/Echo
 
 The codebase is open source and fully reviewable. The grant committee can run
@@ -314,7 +314,7 @@ in seconds.
 |---|---|---|
 | External audit finds critical issues requiring significant rework | Low | Internal audit already found and fixed 5 issues. V3 has CEI pattern, nonReentrant, and zero-address guards. Auditor scope is well-defined. |
 | Web3Auth social login has UX friction on FEVM | Medium | Web3Auth supports custom EVM chains; Calibration and mainnet are EVM-compatible. Fallback: private key import for developers who prefer it. |
-| Lighthouse mainnet upload costs exceed expectations | Low | Lighthouse free tier covers early usage; the paid tier and the Stripe bridge fund ongoing costs. The keeper fee mechanism already accounts for re-pinning costs. |
+| Synapse mainnet storage costs exceed expectations | Low | USDFC-denominated pricing is predictable; the keeper fee mechanism already accounts for re-pinning costs. |
 | Low initial developer adoption | Medium | MCP integration means every Claude Desktop user is one config block away from Echo. ChatGPT Actions integration means ChatGPT Plus users can try it with no code. The hosted gateway removes all self-hosting friction. |
 | Single-developer team creates bus-factor risk | Medium | All code is open source, fully documented, and structured for handoff. Grant milestones are concrete and independently verifiable. |
 

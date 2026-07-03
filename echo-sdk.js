@@ -5,7 +5,7 @@
  * Echo context. Two things happen on every write:
  *
  *   1. The context is encrypted client-side and uploaded to Filecoin
- *      (via a storage gateway like web3.storage / Lighthouse / Synapse SDK),
+ *      (via the Synapse SDK on Filecoin Onchain Cloud),
  *      which returns a CID.
  *   2. That CID + an integrity hash get written to the EchoMemoryRegistry
  *      contract on FEVM, scoped to the user's wallet.
@@ -319,6 +319,6 @@ async function createWeb3AuthSigner(clientId, options = {}) {
   return ethersProvider.getSigner();
 }
 
-const { createLighthouseStorage } = require('./lib/storage');
+const { createSynapseStorage } = require('./lib/storage');
 
-module.exports = { EchoClient, generateEncryptionKey: generateKey, createLighthouseStorage, createWeb3AuthSigner };
+module.exports = { EchoClient, generateEncryptionKey: generateKey, createSynapseStorage, createWeb3AuthSigner };

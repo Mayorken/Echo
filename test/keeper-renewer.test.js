@@ -1,148 +1,123 @@
 const { expect } = require('chai');
-const lighthouse = require('@lighthouse-web3/sdk');
-const { checkDealStatus, repinCid } = require('../keeper/renewer');
+const { checkStorageStatus, repinData } = require('../keeper/renewer');
 
 describe('keeper/renewer.js', function () {
-  let originalDealStatus;
-  let originalUploadBuffer;
-  let originalFetch;
-
-  beforeEach(function () {
-    originalDealStatus = lighthouse.dealStatus;
-    originalUploadBuffer = lighthouse.uploadBuffer;
-    originalFetch = globalThis.fetch;
-  });
-
-  afterEach(function () {
-    lighthouse.dealStatus = originalDealStatus;
-    lighthouse.uploadBuffer = originalUploadBuffer;
-    globalThis.fetch = originalFetch;
-  });
-
-  describe('checkDealStatus', function () {
-    it('returns "no-deal" when Lighthouse returns empty deals', async function () {
-      lighthouse.dealStatus = async function () {
-        return { data: [] };
+  describe('checkStorageStatus', function () {
+    it('returns "active" when download succeeds', async function () {
+      const fakeSynapse = {
+        storage: {
+          download: async () => new Uint8Array([1, 2, 3]),
+        },
       };
-      const result = await checkDealStatus('QmTestCid');
-      expect(result.status).to.equal('no-deal');
-      expect(result.deals).to.deep.equal([]);
-    });
-
-    it('returns "active" when at least one deal is active', async function () {
-      lighthouse.dealStatus = async function () {
-        return {
-          data: [
-            { dealStatus: 'active', endEpoch: '999999', currentEpoch: '100000' },
-          ],
-        };
-      };
-      const result = await checkDealStatus('QmTestCid');
+      const result = await checkStorageStatus('bafk-test-cid', fakeSynapse);
       expect(result.status).to.equal('active');
     });
 
-    it('returns "expiring" when active deal is within threshold', async function () {
-      lighthouse.dealStatus = async function () {
-        return {
-          data: [
-            { dealStatus: 'active', endEpoch: '101000', currentEpoch: '100000' },
-          ],
-        };
+    it('returns "not-found" when download throws "not found"', async function () {
+      const fakeSynapse = {
+        storage: {
+          download: async () => { throw new Error('piece not found'); },
+        },
       };
-      const result = await checkDealStatus('QmTestCid', { expiryThresholdEpochs: 2880 });
-      expect(result.status).to.equal('expiring');
+      const result = await checkStorageStatus('bafk-missing', fakeSynapse);
+      expect(result.status).to.equal('not-found');
+      expect(result.copies).to.equal(0);
     });
 
-    it('returns "error" when dealStatus throws', async function () {
-      lighthouse.dealStatus = async function () {
-        throw new Error('Network error');
+    it('returns "not-found" when download returns null', async function () {
+      const fakeSynapse = {
+        storage: {
+          download: async () => null,
+        },
       };
-      const result = await checkDealStatus('QmTestCid');
+      const result = await checkStorageStatus('bafk-null', fakeSynapse);
+      expect(result.status).to.equal('not-found');
+    });
+
+    it('returns "error" when download throws a non-"not found" error', async function () {
+      const fakeSynapse = {
+        storage: {
+          download: async () => { throw new Error('Network timeout'); },
+        },
+      };
+      const result = await checkStorageStatus('bafk-err', fakeSynapse);
       expect(result.status).to.equal('error');
-      expect(result.error).to.equal('Network error');
-    });
-
-    it('returns "no-deal" when data is null', async function () {
-      lighthouse.dealStatus = async function () {
-        return { data: null };
-      };
-      const result = await checkDealStatus('QmTestCid');
-      expect(result.status).to.equal('no-deal');
+      expect(result.error).to.equal('Network timeout');
     });
   });
 
-  describe('repinCid', function () {
-    it('fetches from gateway and re-uploads via Lighthouse', async function () {
-      const testData = Buffer.from('encrypted context data');
-      globalThis.fetch = async function (url) {
-        expect(url).to.include('QmTestCid');
-        return {
-          ok: true,
-          arrayBuffer: async () => testData.buffer.slice(testData.byteOffset, testData.byteOffset + testData.byteLength),
-        };
-      };
-      lighthouse.uploadBuffer = async function (buffer, apiKey) {
-        expect(Buffer.isBuffer(buffer)).to.equal(true);
-        expect(apiKey).to.equal('test-key');
-        return { data: { Hash: 'QmRePinnedCid', Name: 'QmRePinnedCid', Size: '22' } };
+  describe('repinData', function () {
+    it('downloads and re-uploads data via Synapse', async function () {
+      const testData = new Uint8Array([10, 20, 30]);
+      const fakeSynapse = {
+        storage: {
+          download: async () => testData,
+          prepare: async () => ({ transaction: null }),
+          upload: async (data) => {
+            expect(data).to.deep.equal(testData);
+            return { pieceCid: 'bafk-new-cid', size: 3, complete: true, copies: [1, 2] };
+          },
+        },
       };
 
-      const result = await repinCid('QmTestCid', 'test-key');
+      const result = await repinData('bafk-old-cid', fakeSynapse);
       expect(result.success).to.equal(true);
-      expect(result.newCid).to.equal('QmRePinnedCid');
+      expect(result.newPieceCid).to.equal('bafk-new-cid');
     });
 
-    it('returns error when gateway fetch fails', async function () {
-      globalThis.fetch = async function () {
-        return { ok: false, status: 404 };
+    it('executes prepare transaction when needed', async function () {
+      let prepareExecuted = false;
+      const fakeSynapse = {
+        storage: {
+          download: async () => new Uint8Array([1]),
+          prepare: async () => ({
+            transaction: { execute: async () => { prepareExecuted = true; return { hash: '0x123' }; } },
+          }),
+          upload: async () => ({ pieceCid: 'bafk-new', size: 1, complete: true, copies: [1] }),
+        },
       };
 
-      const result = await repinCid('QmMissingCid', 'test-key');
+      const result = await repinData('bafk-test', fakeSynapse);
+      expect(result.success).to.equal(true);
+      expect(prepareExecuted).to.equal(true);
+    });
+
+    it('returns error when download fails', async function () {
+      const fakeSynapse = {
+        storage: {
+          download: async () => { throw new Error('Download failed'); },
+        },
+      };
+
+      const result = await repinData('bafk-missing', fakeSynapse);
       expect(result.success).to.equal(false);
-      expect(result.error).to.include('HTTP 404');
+      expect(result.error).to.equal('Download failed');
     });
 
-    it('returns error when Lighthouse upload fails', async function () {
-      globalThis.fetch = async function () {
-        return {
-          ok: true,
-          arrayBuffer: async () => new ArrayBuffer(10),
-        };
-      };
-      lighthouse.uploadBuffer = async function () {
-        return { data: {} };
+    it('returns error when upload returns no pieceCid', async function () {
+      const fakeSynapse = {
+        storage: {
+          download: async () => new Uint8Array([1]),
+          prepare: async () => ({ transaction: null }),
+          upload: async () => ({}),
+        },
       };
 
-      const result = await repinCid('QmTestCid', 'test-key');
+      const result = await repinData('bafk-test', fakeSynapse);
       expect(result.success).to.equal(false);
-      expect(result.error).to.include('unexpected response');
+      expect(result.error).to.include('no pieceCid');
     });
 
-    it('uses custom gateway when provided', async function () {
-      let fetchedUrl = '';
-      globalThis.fetch = async function (url) {
-        fetchedUrl = url;
-        return {
-          ok: true,
-          arrayBuffer: async () => new ArrayBuffer(5),
-        };
-      };
-      lighthouse.uploadBuffer = async function () {
-        return { data: { Hash: 'QmNew', Name: 'QmNew', Size: '5' } };
+    it('returns error when download returns null', async function () {
+      const fakeSynapse = {
+        storage: {
+          download: async () => null,
+        },
       };
 
-      await repinCid('QmTestCid', 'test-key', { gateway: 'https://custom-gw.io/ipfs' });
-      expect(fetchedUrl).to.equal('https://custom-gw.io/ipfs/QmTestCid');
-    });
-
-    it('returns error when fetch throws', async function () {
-      globalThis.fetch = async function () {
-        throw new Error('DNS resolution failed');
-      };
-
-      const result = await repinCid('QmTestCid', 'test-key');
+      const result = await repinData('bafk-null', fakeSynapse);
       expect(result.success).to.equal(false);
-      expect(result.error).to.equal('DNS resolution failed');
+      expect(result.error).to.include('no data');
     });
   });
 });

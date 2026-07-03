@@ -908,7 +908,7 @@ function s4(){
           showTyping(false);
           addMsg("got your Echo context from Codex — Landrush API, Go, the AES-256-GCM implementation, key stored as Docker secret. you want to talk Filecoin storage for the documents?", 'ai');
           setQRs([
-            { text:"yes, should i use renterd or a gateway like Lighthouse?", action: s5 },
+            { text:"yes, should i use renterd or a gateway like Synapse?", action: s5 },
           ]);
         }, 1500);
       });
@@ -917,12 +917,12 @@ function s4(){
 }
 
 function s5(){
-  addMsg("yes, should i use renterd or a gateway like Lighthouse?", 'user');
+  addMsg("yes, should i use renterd or a gateway like Synapse?", 'user');
   showTyping(true);
-  addCtx('RESEARCH · STORAGE', 'Evaluating renterd vs Lighthouse gateway for Filecoin document storage in Landrush', 'claude');
+  addCtx('RESEARCH · STORAGE', 'Evaluating renterd vs Synapse SDK for Filecoin document storage in Landrush', 'claude');
   setTimeout(function(){
     showTyping(false);
-    addMsg("for an MVP, Lighthouse is the faster path — HTTP API, no node to run, free tier to start. renterd gives you full control and lower costs at scale but needs a dedicated node. since you're early stage I'd start with Lighthouse and migrate later when volume justifies it.", 'ai');
+    addMsg("for an MVP, the Synapse SDK is the faster path — simple API, no node to run, PDP-backed storage out of the box. renterd gives you full control and lower costs at scale but needs a dedicated node. since you're early stage I'd start with Synapse SDK and revisit renterd when volume justifies it.", 'ai');
     setQRs([
       { text:"makes sense. let me ask Gemini to review the overall architecture", action: s6 },
     ]);
@@ -933,7 +933,7 @@ function s6(){
   addMsg("makes sense. let me ask Gemini to review the overall architecture", 'user');
   clearQRs();
   $id('rowGemini').style.display = 'flex';
-  addCtx('DECISION · INFRA', 'Using Lighthouse gateway for Filecoin storage at MVP stage, migrate to renterd at scale', 'claude');
+  addCtx('DECISION · INFRA', 'Using Synapse SDK for Filecoin storage at MVP stage, evaluate renterd at scale', 'claude');
   setTimeout(function(){
     addMsg("switching to Gemini — full context follows.", 'sys');
     setTimeout(function(){
@@ -941,7 +941,7 @@ function s6(){
         showTyping(true);
         setTimeout(function(){
           showTyping(false);
-          addMsg("I have the full picture from Echo — Go API, AES-256-GCM encryption with Docker-secret key management, Lighthouse for Filecoin storage. the architecture looks solid. one flag: make sure you're storing the nonce alongside the ciphertext — your Go snippet prepends it which is correct, just want to confirm you're parsing it back correctly on decrypt.", 'ai');
+          addMsg("I have the full picture from Echo — Go API, AES-256-GCM encryption with Docker-secret key management, Synapse SDK for Filecoin storage. the architecture looks solid. one flag: make sure you're storing the nonce alongside the ciphertext — your Go snippet prepends it which is correct, just want to confirm you're parsing it back correctly on decrypt.", 'ai');
           setQRs([
             { text:"good catch. now revoke Codex access and watch what happens →", action: s7 },
           ]);

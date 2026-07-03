@@ -2,8 +2,8 @@
  * keeper/index.js
  *
  * The auto-renewal keeper: scans the EchoMemoryRegistry for funded vaults,
- * checks each CID's Filecoin deal status, and re-pins any that are expiring
- * or have no active deal.
+ * checks each CID's storage status via Synapse, and re-pins any that are
+ * degraded or not found.
  *
  * After a successful re-pin the keeper calls keeperDeductRenewal() to pull
  * the re-pinning cost from the user's on-chain renewalBalance. This makes
@@ -17,16 +17,16 @@
 const { ethers } = require('ethers');
 const registryAbi = require('../EchoMemoryRegistry.abi.json');
 const { scanFundedVaults } = require('./scanner');
-const { checkDealStatus, repinCid } = require('./renewer');
+const { checkStorageStatus, repinData, createKeeperSynapse } = require('./renewer');
 
 /**
- * Run one sweep: scan for funded vaults, check deal status, re-pin as needed,
- * and deduct the keeper fee from the user's on-chain balance.
+ * Run one sweep: scan for funded vaults, check storage status, re-pin as
+ * needed, and deduct the keeper fee from the user's on-chain balance.
  *
  * @param {object} config
  * @param {string} config.rpcUrl FEVM RPC endpoint
  * @param {string} config.contractAddress Deployed EchoMemoryRegistry proxy address
- * @param {string} config.lighthouseApiKey Lighthouse API key for re-pinning
+ * @param {string} config.synapsePrivateKey Private key for Synapse storage operations
  * @param {string} [config.keeperPrivateKey] Keeper's private key for signing
  *        keeperDeductRenewal transactions. If omitted, the keeper runs in
  *        read-only/observation mode and logs what it would do without deducting.
@@ -34,8 +34,7 @@ const { checkDealStatus, repinCid } = require('./renewer');
  *        successful re-pin in wei (default 0.01 FIL). Must be <= user's
  *        renewalBalance or the deduction is skipped.
  * @param {number} [config.fromBlock=0] Block to start scanning from
- * @param {number} [config.expiryThresholdEpochs] Epochs before expiry to trigger renewal
- * @param {string} [config.gateway] IPFS gateway URL
+ * @param {string} [config.chain] 'mainnet' or 'calibration' (default: 'calibration')
  * @param {function} [config.log] Logger function (defaults to console.log)
  * @returns {Promise<{scanned: number, renewed: number, errors: number, lastBlock: number, results: Array}>}
  */
@@ -43,8 +42,6 @@ async function runSweep(config) {
   const log = config.log || console.log;
   const provider = new ethers.JsonRpcProvider(config.rpcUrl, undefined, { cacheTimeout: -1 });
 
-  // Build a signer-backed contract when a keeperPrivateKey is provided so the
-  // keeper can call keeperDeductRenewal(). Without it we fall back to read-only.
   let contract;
   let keeperSigner = null;
   if (config.keeperPrivateKey) {
@@ -59,9 +56,6 @@ async function runSweep(config) {
     ? BigInt(config.keeperFeeWei)
     : ethers.parseEther('0.01');
 
-  // Sanity-check: reject obviously misconfigured fees (> 1 FIL per renewal).
-  // A misconfigured fee won't lose funds (the contract enforces amount <= balance),
-  // but it would drain balances faster than intended and is almost certainly a typo.
   const MAX_REASONABLE_FEE = ethers.parseEther('1');
   if (keeperFeeWei > MAX_REASONABLE_FEE) {
     throw new Error(
@@ -71,6 +65,10 @@ async function runSweep(config) {
   }
 
   log('[keeper] Starting sweep...');
+
+  const synapse = await createKeeperSynapse(config.synapsePrivateKey, {
+    chain: config.chain,
+  });
 
   const { vaults, lastBlock } = await scanFundedVaults(contract, { fromBlock: config.fromBlock || 0 });
   log(`[keeper] Found ${vaults.length} funded vault(s) (scanned to block ${lastBlock})`);
@@ -83,41 +81,34 @@ async function runSweep(config) {
     const { user, cid, renewalBalance } = vault;
     log(`[keeper] Checking vault: user=${user} cid=${cid} balance=${ethers.formatEther(renewalBalance)} FIL`);
 
-    const dealCheck = await checkDealStatus(cid, {
-      expiryThresholdEpochs: config.expiryThresholdEpochs,
-    });
+    const storageCheck = await checkStorageStatus(cid, synapse);
 
-    if (dealCheck.status === 'active') {
-      log(`[keeper]   Deal is active — no action needed`);
-      results.push({ user, cid, action: 'none', dealStatus: 'active' });
+    if (storageCheck.status === 'active') {
+      log(`[keeper]   Storage is healthy — no action needed`);
+      results.push({ user, cid, action: 'none', storageStatus: 'active' });
       continue;
     }
 
-    if (dealCheck.status === 'error') {
+    if (storageCheck.status === 'error') {
       errors++;
-      log(`[keeper]   Deal status check failed: ${dealCheck.error || 'unknown error'} — skipping`);
-      results.push({ user, cid, action: 'error', error: dealCheck.error || 'status check failed', dealStatus: 'error' });
+      log(`[keeper]   Storage status check failed: ${storageCheck.error || 'unknown error'} — skipping`);
+      results.push({ user, cid, action: 'error', error: storageCheck.error || 'status check failed', storageStatus: 'error' });
       continue;
     }
 
-    log(`[keeper]   Deal status: ${dealCheck.status} — attempting re-pin`);
-    const repin = await repinCid(cid, config.lighthouseApiKey, {
-      gateway: config.gateway,
-    });
+    log(`[keeper]   Storage status: ${storageCheck.status} — attempting re-pin`);
+    const repin = await repinData(cid, synapse);
 
     if (!repin.success) {
       errors++;
       log(`[keeper]   Re-pin failed: ${repin.error}`);
-      results.push({ user, cid, action: 'error', error: repin.error, dealStatus: dealCheck.status });
+      results.push({ user, cid, action: 'error', error: repin.error, storageStatus: storageCheck.status });
       continue;
     }
 
     renewed++;
-    log(`[keeper]   Re-pinned successfully (new CID: ${repin.newCid})`);
+    log(`[keeper]   Re-pinned successfully (new pieceCid: ${repin.newPieceCid})`);
 
-    // Attempt on-chain reimbursement only when we have a signer and the user's
-    // balance covers the fee. A shortfall means the keeper absorbs this renewal
-    // cost — the vault continues to be serviced until the balance is topped up.
     let deducted = false;
     if (keeperSigner && renewalBalance >= keeperFeeWei) {
       try {
@@ -136,8 +127,8 @@ async function runSweep(config) {
       user,
       cid,
       action: 'renewed',
-      newCid: repin.newCid,
-      dealStatus: dealCheck.status,
+      newPieceCid: repin.newPieceCid,
+      storageStatus: storageCheck.status,
       feeDeducted: deducted ? keeperFeeWei.toString() : '0',
     });
   }
