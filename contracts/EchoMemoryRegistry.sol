@@ -53,6 +53,7 @@ contract EchoMemoryRegistry is
     error NothingToWithdraw();
     error TransferFailed();
     error EmptyCid();
+    error ZeroFundAmount();
 
     modifier onlySelfOrGrantedApp(address user) {
         if (msg.sender != user && !accessList[user][msg.sender]) revert NotAuthorized();
@@ -143,7 +144,7 @@ contract EchoMemoryRegistry is
      *         so the context file never expires.
      */
     function fundRenewal() external payable {
-        if (msg.value == 0) revert NothingToWithdraw();
+        if (msg.value == 0) revert ZeroFundAmount();
         MemoryVault storage vault = vaults[msg.sender];
         vault.renewalBalance += msg.value;
         emit RenewalFunded(msg.sender, msg.value, vault.renewalBalance);

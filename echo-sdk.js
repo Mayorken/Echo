@@ -34,6 +34,15 @@ class EchoClient {
    *        backed by whichever Filecoin storage gateway the tool uses.
    */
   constructor(rpcUrl, contractAddress, signer, storage) {
+    if (!rpcUrl || typeof rpcUrl !== 'string') {
+      throw new Error('EchoClient: rpcUrl must be a non-empty string');
+    }
+    if (!ethers.isAddress(contractAddress)) {
+      throw new Error('EchoClient: contractAddress must be a valid address');
+    }
+    if (!storage || typeof storage.put !== 'function' || typeof storage.get !== 'function') {
+      throw new Error('EchoClient: storage must implement put(bytes) and get(cid)');
+    }
     // Wrapping in a NonceManager avoids a real race we hit during testing:
     // providers can serve a momentarily stale "pending" nonce when several
     // transactions are sent back-to-back from the same address (e.g. save,
@@ -61,6 +70,12 @@ class EchoClient {
    *        user — generate one with generateEncryptionKey(). Never sent on-chain.
    */
   async saveMemory(memoryObject, encryptionKey) {
+    if (!memoryObject || typeof memoryObject !== 'object') {
+      throw new Error('saveMemory: memoryObject must be a non-null object');
+    }
+    if (!(encryptionKey instanceof Uint8Array) || encryptionKey.length !== 32) {
+      throw new Error('saveMemory: encryptionKey must be a 32-byte Uint8Array');
+    }
     const plaintext = new TextEncoder().encode(JSON.stringify(memoryObject));
     const integrityHash = ethers.keccak256(plaintext);
 
@@ -79,6 +94,12 @@ class EchoClient {
    * @param {Uint8Array} decryptionKey the same 32-byte key used in saveMemory
    */
   async loadMemory(userAddress, decryptionKey) {
+    if (!ethers.isAddress(userAddress)) {
+      throw new Error('loadMemory: userAddress must be a valid address');
+    }
+    if (!(decryptionKey instanceof Uint8Array) || decryptionKey.length !== 32) {
+      throw new Error('loadMemory: decryptionKey must be a 32-byte Uint8Array');
+    }
     const [cid, integrityHash] = await this.contract.getMemory(userAddress);
     if (!cid) return null;
 
@@ -94,24 +115,36 @@ class EchoClient {
 
   /** Grant a new AI tool (by its contract/wallet address) read access to your context. */
   async grantAccess(appAddress) {
+    if (!ethers.isAddress(appAddress)) {
+      throw new Error('grantAccess: appAddress must be a valid address');
+    }
     const tx = await this.contract.grantAccess(appAddress);
     return tx.wait();
   }
 
   /** Revoke a previously granted tool's access — the user controls who reads their context. */
   async revokeAccess(appAddress) {
+    if (!ethers.isAddress(appAddress)) {
+      throw new Error('revokeAccess: appAddress must be a valid address');
+    }
     const tx = await this.contract.revokeAccess(appAddress);
     return tx.wait();
   }
 
   /** Fund the perpetual-storage renewal endowment for your vault. */
   async fundRenewal(amountInFil) {
+    if (typeof amountInFil !== 'string' || !/^\d+(\.\d+)?$/.test(amountInFil) || Number(amountInFil) <= 0) {
+      throw new Error('fundRenewal: amountInFil must be a positive numeric string (e.g. "1.5")');
+    }
     const tx = await this.contract.fundRenewal({ value: ethers.parseEther(amountInFil) });
     return tx.wait();
   }
 
   /** List every AI tool ever granted access, with their current (live) status. */
   async listAccess(userAddress) {
+    if (!ethers.isAddress(userAddress)) {
+      throw new Error('listAccess: userAddress must be a valid address');
+    }
     const history = await this.contract.appAccessHistory(userAddress);
     const withStatus = await Promise.all(
       history.map(async (app) => ({ app, active: await this.contract.hasAccess(userAddress, app) }))
@@ -138,6 +171,9 @@ class EchoClient {
    * @param {string} vaultName Human-readable name (e.g. "team-alpha")
    */
   async createVault(vaultName) {
+    if (!vaultName || typeof vaultName !== 'string') {
+      throw new Error('createVault: vaultName must be a non-empty string');
+    }
     const tx = await this.contract.createVault(this._vaultId(vaultName));
     return tx.wait();
   }
@@ -152,6 +188,15 @@ class EchoClient {
    * @param {Uint8Array} encryptionKey 32-byte key shared by all vault members
    */
   async saveVaultMemory(vaultName, memoryObject, encryptionKey) {
+    if (!vaultName || typeof vaultName !== 'string') {
+      throw new Error('saveVaultMemory: vaultName must be a non-empty string');
+    }
+    if (!memoryObject || typeof memoryObject !== 'object') {
+      throw new Error('saveVaultMemory: memoryObject must be a non-null object');
+    }
+    if (!(encryptionKey instanceof Uint8Array) || encryptionKey.length !== 32) {
+      throw new Error('saveVaultMemory: encryptionKey must be a 32-byte Uint8Array');
+    }
     const plaintext = new TextEncoder().encode(JSON.stringify(memoryObject));
     const integrityHash = ethers.keccak256(plaintext);
 
@@ -169,6 +214,12 @@ class EchoClient {
    * @param {Uint8Array} decryptionKey the shared 32-byte key
    */
   async loadVaultMemory(vaultName, decryptionKey) {
+    if (!vaultName || typeof vaultName !== 'string') {
+      throw new Error('loadVaultMemory: vaultName must be a non-empty string');
+    }
+    if (!(decryptionKey instanceof Uint8Array) || decryptionKey.length !== 32) {
+      throw new Error('loadVaultMemory: decryptionKey must be a 32-byte Uint8Array');
+    }
     const [cid, integrityHash] = await this.contract.getVaultMemory(this._vaultId(vaultName));
     if (!cid) return null;
 
@@ -188,6 +239,12 @@ class EchoClient {
    * @param {string} memberAddress Ethereum address of the new member
    */
   async grantVaultAccess(vaultName, memberAddress) {
+    if (!vaultName || typeof vaultName !== 'string') {
+      throw new Error('grantVaultAccess: vaultName must be a non-empty string');
+    }
+    if (!ethers.isAddress(memberAddress)) {
+      throw new Error('grantVaultAccess: memberAddress must be a valid address');
+    }
     const tx = await this.contract.grantVaultAccess(this._vaultId(vaultName), memberAddress);
     return tx.wait();
   }
@@ -199,6 +256,12 @@ class EchoClient {
    * @param {string} memberAddress
    */
   async revokeVaultAccess(vaultName, memberAddress) {
+    if (!vaultName || typeof vaultName !== 'string') {
+      throw new Error('revokeVaultAccess: vaultName must be a non-empty string');
+    }
+    if (!ethers.isAddress(memberAddress)) {
+      throw new Error('revokeVaultAccess: memberAddress must be a valid address');
+    }
     const tx = await this.contract.revokeVaultAccess(this._vaultId(vaultName), memberAddress);
     return tx.wait();
   }

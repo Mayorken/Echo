@@ -199,6 +199,17 @@ describe('integrations/mcp-server.js', function () {
       }
       expect(threw).to.equal(true);
     });
+
+    it('rejects missing context in echo_save_context', async function () {
+      let threw = false;
+      try {
+        await handleToolCall('echo_save_context', {});
+      } catch (err) {
+        threw = true;
+        expect(err.message).to.include('context');
+      }
+      expect(threw).to.equal(true);
+    });
   });
 
   describe('unknown tool', function () {
