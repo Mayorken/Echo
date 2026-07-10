@@ -159,6 +159,95 @@ describe('EchoMemoryRegistry (running on a local in-process chain)', function ()
     });
   });
 
+  describe('write access control (delegated writes via updateMemoryFor)', function () {
+    it('blocks an app with no granted write access from writing on behalf of a user', async function () {
+      await expectRevertedWithCustomError(
+        () => registry.connect(appA).updateMemoryFor(owner.address, cid, integrityHash),
+        registry,
+        'NotAuthorized'
+      );
+    });
+
+    it('rejects granting write access to the zero address', async function () {
+      await expectRevertedWithCustomError(
+        () => registry.connect(owner).grantWriteAccess(ethers.ZeroAddress),
+        registry,
+        'NotAuthorized'
+      );
+    });
+
+    it('lets a write-granted app write on the user\'s behalf, and emits WriteAccessGranted + MemoryUpdated', async function () {
+      await expectEmit(
+        () => registry.connect(owner).grantWriteAccess(appA.address),
+        registry,
+        'WriteAccessGranted',
+        [owner.address, appA.address]
+      );
+      expect(await registry.hasWriteAccess(owner.address, appA.address)).to.equal(true);
+
+      await expectEmit(
+        () => registry.connect(appA).updateMemoryFor(owner.address, cid, integrityHash),
+        registry,
+        'MemoryUpdated'
+      );
+      const [storedCid, storedHash] = await registry.getMemory(owner.address);
+      expect(storedCid).to.equal(cid);
+      expect(storedHash).to.equal(integrityHash);
+    });
+
+    it('revokes write access so the app can no longer write, and emits WriteAccessRevoked', async function () {
+      await registry.connect(owner).grantWriteAccess(appA.address);
+      await expectEmit(
+        () => registry.connect(owner).revokeWriteAccess(appA.address),
+        registry,
+        'WriteAccessRevoked',
+        [owner.address, appA.address]
+      );
+      expect(await registry.hasWriteAccess(owner.address, appA.address)).to.equal(false);
+      await expectRevertedWithCustomError(
+        () => registry.connect(appA).updateMemoryFor(owner.address, cid, integrityHash),
+        registry,
+        'NotAuthorized'
+      );
+    });
+
+    it('read access and write access are independent grants', async function () {
+      await registry.connect(owner).grantAccess(appA.address);
+      // appA can read (granted) but still cannot write (not granted)
+      const [readCid] = await registry.connect(appA).getMemory(owner.address);
+      expect(readCid).to.equal('');
+      await expectRevertedWithCustomError(
+        () => registry.connect(appA).updateMemoryFor(owner.address, cid, integrityHash),
+        registry,
+        'NotAuthorized'
+      );
+
+      // appB has write access but was never granted read access
+      await registry.connect(owner).grantWriteAccess(appB.address);
+      await registry.connect(appB).updateMemoryFor(owner.address, cid, integrityHash);
+      await expectRevertedWithCustomError(
+        () => registry.connect(appB).getMemory(owner.address),
+        registry,
+        'NotAuthorized'
+      );
+    });
+
+    it('rejects empty CID in updateMemoryFor', async function () {
+      await registry.connect(owner).grantWriteAccess(appA.address);
+      await expectRevertedWithCustomError(
+        () => registry.connect(appA).updateMemoryFor(owner.address, '', integrityHash),
+        registry,
+        'EmptyCid'
+      );
+    });
+
+    it('lets a user write their own memory via updateMemoryFor with no grant needed', async function () {
+      await registry.connect(owner).updateMemoryFor(owner.address, cid, integrityHash);
+      const [storedCid] = await registry.getMemory(owner.address);
+      expect(storedCid).to.equal(cid);
+    });
+  });
+
   describe('renewal funding (perpetual storage endowment)', function () {
     it('accepts FIL and tracks balance per user, emitting RenewalFunded', async function () {
       const amount = ethers.parseEther('1.0');

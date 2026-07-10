@@ -27,6 +27,14 @@ const rateLimit = require('express-rate-limit');
 const { ethers } = require('ethers');
 const { EchoClient, generateEncryptionKey } = require('../echo-sdk');
 const { createSynapseStorage } = require('../lib/storage');
+const { generateApiKey, validateApiKey } = require('../lib/apiKeys');
+
+function parseHexKey(hex, headerName) {
+  if (typeof hex !== 'string' || !/^[0-9a-fA-F]{64}$/.test(hex)) {
+    throw new Error(`${headerName} header must be a 64-character hex string (32 bytes)`);
+  }
+  return Uint8Array.from(Buffer.from(hex, 'hex'));
+}
 
 function createApp(config) {
   const {
@@ -44,6 +52,7 @@ function createApp(config) {
   app.use(rateLimit({ windowMs: 60000, max: 60, standardHeaders: true, legacyHeaders: false }));
 
   const client = new EchoClient(rpcUrl, contractAddress, signer, storage);
+  const serviceWalletAddress = signer && signer.address ? signer.address : null;
 
   app.get('/health', (req, res) => {
     res.json({ status: 'ok', contractAddress, timestamp: new Date().toISOString() });
@@ -288,6 +297,103 @@ function createApp(config) {
     } catch (err) {
       console.error('POST /vault/revoke error:', err.message);
       res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // ── Hosted multi-tenant routes (API key auth) ──────────────────────────────
+  // Everything above operates as "the connected user" = this server's own
+  // signer (self-hosted mode: one operator, one wallet). The routes below let
+  // a hosted deployment serve many users, each authenticating with an API key
+  // instead of a wallet. A user must first grant this server's wallet
+  // (serviceWalletAddress) read access (and, for saving, write access — see
+  // grantWriteAccess() in echo-sdk.js) before signing up here.
+  //
+  // Trust note: because this server performs the encrypt/decrypt itself, the
+  // caller's encryption key and plaintext context necessarily pass through
+  // this process transiently (in-memory, per-request, never persisted) —
+  // that's a different trust boundary than encryption happening entirely in
+  // the end user's own browser or device. Worth being explicit about rather
+  // than implying it's identical to the fully client-side model.
+
+  /**
+   * POST /v1/auth/signup
+   * Issue an API key for a user who has already granted this server's wallet
+   * read access on-chain. Body: { userAddress: "0x..." }
+   */
+  app.post('/v1/auth/signup', async (req, res) => {
+    try {
+      if (!serviceWalletAddress) {
+        return res.status(503).json({ error: 'Hosted mode is not configured on this server' });
+      }
+      const { userAddress } = req.body;
+      if (!userAddress || !ethers.isAddress(userAddress)) {
+        return res.status(400).json({ error: 'Valid "userAddress" is required' });
+      }
+      const granted = await client.contract.hasAccess(userAddress, serviceWalletAddress);
+      if (!granted) {
+        return res.status(403).json({
+          error: `Address ${userAddress} has not granted this service (${serviceWalletAddress}) read access yet. Call grantAccess() first.`,
+        });
+      }
+      const apiKey = generateApiKey(userAddress);
+      res.json({ apiKey, userAddress });
+    } catch (err) {
+      console.error('POST /v1/auth/signup error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  function requireApiKey(req, res, next) {
+    const header = req.get('Authorization') || '';
+    const apiKey = header.startsWith('Bearer ') ? header.slice(7) : null;
+    const record = apiKey ? validateApiKey(apiKey) : null;
+    if (!record) {
+      return res.status(401).json({ error: 'Missing or invalid API key' });
+    }
+    req.userAddress = record.userAddress;
+    next();
+  }
+
+  /**
+   * GET /v1/context
+   * Load and decrypt the signed-in user's context.
+   * Header: X-Echo-Key: <64-char hex decryption key>
+   */
+  app.get('/v1/context', requireApiKey, async (req, res) => {
+    try {
+      const decryptionKey = parseHexKey(req.get('X-Echo-Key'), 'X-Echo-Key');
+      const context = await client.loadMemory(req.userAddress, decryptionKey);
+      if (context === null) {
+        return res.json({ context: null, message: 'No context stored for this user' });
+      }
+      res.json({ context });
+    } catch (err) {
+      console.error('GET /v1/context error:', err.message);
+      const status = /X-Echo-Key header/.test(err.message) ? 400 : 500;
+      res.status(status).json({ error: status === 400 ? err.message : 'Internal server error' });
+    }
+  });
+
+  /**
+   * POST /v1/context
+   * Save context on the signed-in user's behalf. Requires the user to have
+   * granted this server's wallet write access (grantWriteAccess()).
+   * Header: X-Echo-Key: <64-char hex encryption key>
+   * Body: { context: { ...any JSON... } }
+   */
+  app.post('/v1/context', requireApiKey, async (req, res) => {
+    try {
+      const { context } = req.body;
+      if (!context || typeof context !== 'object') {
+        return res.status(400).json({ error: 'Request body must include a "context" object' });
+      }
+      const encKey = parseHexKey(req.get('X-Echo-Key'), 'X-Echo-Key');
+      const result = await client.saveMemoryFor(req.userAddress, context, encKey);
+      res.json({ success: true, cid: result.cid, integrityHash: result.integrityHash });
+    } catch (err) {
+      console.error('POST /v1/context error:', err.message);
+      const status = /X-Echo-Key header/.test(err.message) ? 400 : 500;
+      res.status(status).json({ error: status === 400 ? err.message : 'Internal server error' });
     }
   });
 

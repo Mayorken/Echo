@@ -22,7 +22,7 @@ function makeFakeStorage() {
   };
 }
 
-function request(app, method, path, body) {
+function request(app, method, path, body, headers) {
   return new Promise((resolve, reject) => {
     const http = require('http');
     const server = app.listen(0, () => {
@@ -32,7 +32,7 @@ function request(app, method, path, body) {
         port,
         path,
         method: method.toUpperCase(),
-        headers: { 'Content-Type': 'application/json' },
+        headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
       };
       const req = http.request(options, (res) => {
         let data = '';
@@ -56,7 +56,7 @@ function request(app, method, path, body) {
 describe('integrations/rest-api.js', function () {
   this.timeout(30000);
 
-  let contracts, provider, owner, stranger, app, encryptionKey;
+  let contracts, provider, owner, stranger, app, encryptionKey, registry;
 
   before(async function () {
     contracts = compileAll();
@@ -69,7 +69,7 @@ describe('integrations/rest-api.js', function () {
   });
 
   beforeEach(async function () {
-    const registry = await deployProxy(contracts.EchoMemoryRegistry, owner);
+    registry = await deployProxy(contracts.EchoMemoryRegistry, owner);
     const contractAddress = await registry.getAddress();
     const storage = makeFakeStorage();
     app = createApp({
@@ -182,6 +182,99 @@ describe('integrations/rest-api.js', function () {
       expect(res.status).to.equal(200);
       expect(res.body).to.have.property('key');
       expect(res.body.key).to.match(/^[0-9a-f]{64}$/);
+    });
+  });
+
+  describe('hosted multi-tenant routes (API key auth)', function () {
+    // In these tests `owner` plays the hosted service's own wallet (it's the
+    // signer the app was built with), and `stranger` plays an end user who
+    // grants that service wallet access on-chain. encryptionKey is only set
+    // once the outer before() hook runs, so keyHex is computed lazily inside
+    // each beforeEach/it below rather than at describe-body eval time.
+
+    describe('POST /v1/auth/signup', function () {
+      it('rejects an address that has not granted read access', async function () {
+        const res = await request(app, 'POST', '/v1/auth/signup', { userAddress: stranger.address });
+        expect(res.status).to.equal(403);
+        expect(res.body.error).to.include('grantAccess');
+      });
+
+      it('issues an API key once read access is granted', async function () {
+        await registry.connect(stranger).grantAccess(owner.address);
+        const res = await request(app, 'POST', '/v1/auth/signup', { userAddress: stranger.address });
+        expect(res.status).to.equal(200);
+        expect(res.body.apiKey).to.match(/^echo_[0-9a-f]{64}$/);
+        expect(res.body.userAddress).to.equal(stranger.address);
+      });
+
+      it('rejects an invalid userAddress', async function () {
+        const res = await request(app, 'POST', '/v1/auth/signup', { userAddress: 'not-an-address' });
+        expect(res.status).to.equal(400);
+      });
+    });
+
+    describe('GET /v1/context and POST /v1/context', function () {
+      let apiKey, keyHex;
+
+      beforeEach(async function () {
+        keyHex = Buffer.from(encryptionKey).toString('hex');
+        await registry.connect(stranger).grantAccess(owner.address);
+        const signupRes = await request(app, 'POST', '/v1/auth/signup', { userAddress: stranger.address });
+        apiKey = signupRes.body.apiKey;
+      });
+
+      it('rejects requests with no API key', async function () {
+        const res = await request(app, 'GET', '/v1/context');
+        expect(res.status).to.equal(401);
+      });
+
+      it('rejects requests with a bogus API key', async function () {
+        const res = await request(app, 'GET', '/v1/context', null, { Authorization: 'Bearer not-a-real-key' });
+        expect(res.status).to.equal(401);
+      });
+
+      it('returns null context before anything has been saved', async function () {
+        const res = await request(app, 'GET', '/v1/context', null, {
+          Authorization: `Bearer ${apiKey}`,
+          'X-Echo-Key': keyHex,
+        });
+        expect(res.status).to.equal(200);
+        expect(res.body.context).to.equal(null);
+      });
+
+      it('rejects saving without write access granted', async function () {
+        const res = await request(app, 'POST', '/v1/context', { context: { hello: 'world' } }, {
+          Authorization: `Bearer ${apiKey}`,
+          'X-Echo-Key': keyHex,
+        });
+        expect(res.status).to.not.equal(200);
+      });
+
+      it('rejects a missing X-Echo-Key header', async function () {
+        await registry.connect(stranger).grantWriteAccess(owner.address);
+        const res = await request(app, 'POST', '/v1/context', { context: { hello: 'world' } }, {
+          Authorization: `Bearer ${apiKey}`,
+        });
+        expect(res.status).to.equal(400);
+        expect(res.body.error).to.include('X-Echo-Key');
+      });
+
+      it('saves and loads context once write access is granted', async function () {
+        await registry.connect(stranger).grantWriteAccess(owner.address);
+        const saveRes = await request(app, 'POST', '/v1/context', { context: { hello: 'world' } }, {
+          Authorization: `Bearer ${apiKey}`,
+          'X-Echo-Key': keyHex,
+        });
+        expect(saveRes.status).to.equal(200);
+        expect(saveRes.body.success).to.equal(true);
+
+        const loadRes = await request(app, 'GET', '/v1/context', null, {
+          Authorization: `Bearer ${apiKey}`,
+          'X-Echo-Key': keyHex,
+        });
+        expect(loadRes.status).to.equal(200);
+        expect(loadRes.body.context).to.deep.equal({ hello: 'world' });
+      });
     });
   });
 });

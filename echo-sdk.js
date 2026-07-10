@@ -113,6 +113,38 @@ class EchoClient {
     return JSON.parse(new TextDecoder().decode(plaintext));
   }
 
+  /**
+   * Save a context snapshot on behalf of another user. Will revert on-chain
+   * unless the caller has been granted write access via grantWriteAccess() —
+   * a stronger, separate permission from the read access grantAccess() gives.
+   * This is how a hosted service can save context for a user without ever
+   * holding that user's own signing key.
+   * @param {string}     userAddress    The user whose vault is being written to
+   * @param {object}     memoryObject   Plain JS object: project context, preferences, decisions, etc.
+   * @param {Uint8Array} encryptionKey  32-byte key — must match whatever key the
+   *        user decrypts with, so this should be agreed with the user out-of-band.
+   */
+  async saveMemoryFor(userAddress, memoryObject, encryptionKey) {
+    if (!ethers.isAddress(userAddress)) {
+      throw new Error('saveMemoryFor: userAddress must be a valid address');
+    }
+    if (!memoryObject || typeof memoryObject !== 'object') {
+      throw new Error('saveMemoryFor: memoryObject must be a non-null object');
+    }
+    if (!(encryptionKey instanceof Uint8Array) || encryptionKey.length !== 32) {
+      throw new Error('saveMemoryFor: encryptionKey must be a 32-byte Uint8Array');
+    }
+    const plaintext = new TextEncoder().encode(JSON.stringify(memoryObject));
+    const integrityHash = ethers.keccak256(plaintext);
+
+    const encrypted = await encrypt(plaintext, encryptionKey);
+    const cid = await this.storage.put(encrypted);
+
+    const tx = await this.contract.updateMemoryFor(userAddress, cid, integrityHash);
+    await tx.wait();
+    return { cid, integrityHash };
+  }
+
   /** Grant a new AI tool (by its contract/wallet address) read access to your context. */
   async grantAccess(appAddress) {
     if (!ethers.isAddress(appAddress)) {
@@ -129,6 +161,39 @@ class EchoClient {
     }
     const tx = await this.contract.revokeAccess(appAddress);
     return tx.wait();
+  }
+
+  /**
+   * Grant a tool permission to write (overwrite) your context, not just read
+   * it. Intentionally separate from grantAccess() — a tool you only want to
+   * read your context shouldn't automatically be able to overwrite it too.
+   */
+  async grantWriteAccess(appAddress) {
+    if (!ethers.isAddress(appAddress)) {
+      throw new Error('grantWriteAccess: appAddress must be a valid address');
+    }
+    const tx = await this.contract.grantWriteAccess(appAddress);
+    return tx.wait();
+  }
+
+  /** Revoke a previously granted tool's write access. */
+  async revokeWriteAccess(appAddress) {
+    if (!ethers.isAddress(appAddress)) {
+      throw new Error('revokeWriteAccess: appAddress must be a valid address');
+    }
+    const tx = await this.contract.revokeWriteAccess(appAddress);
+    return tx.wait();
+  }
+
+  /** Check whether a tool currently has write access to a user's context. */
+  async hasWriteAccess(userAddress, appAddress) {
+    if (!ethers.isAddress(userAddress)) {
+      throw new Error('hasWriteAccess: userAddress must be a valid address');
+    }
+    if (!ethers.isAddress(appAddress)) {
+      throw new Error('hasWriteAccess: appAddress must be a valid address');
+    }
+    return this.contract.hasWriteAccess(userAddress, appAddress);
   }
 
   /** Fund the perpetual-storage renewal endowment for your vault. */

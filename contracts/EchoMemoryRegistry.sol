@@ -40,12 +40,18 @@ contract EchoMemoryRegistry is
     /// @dev user => AI tool address => has read access
     mapping(address => mapping(address => bool)) internal accessList;
 
+    /// @dev user => AI tool address => has write access (stronger than read:
+    ///      lets the tool overwrite the user's context, not just view it)
+    mapping(address => mapping(address => bool)) internal writeAccessList;
+
     /// @dev user => list of AI tool addresses ever granted access (for enumeration in UIs)
     mapping(address => address[]) internal grantedAppsHistory;
 
     event MemoryUpdated(address indexed user, string cid, bytes32 integrityHash, uint64 updatedAt);
     event AccessGranted(address indexed user, address indexed app);
     event AccessRevoked(address indexed user, address indexed app);
+    event WriteAccessGranted(address indexed user, address indexed app);
+    event WriteAccessRevoked(address indexed user, address indexed app);
     event RenewalFunded(address indexed user, uint256 amount, uint256 newBalance);
     event RenewalWithdrawn(address indexed user, uint256 amount);
 
@@ -57,6 +63,11 @@ contract EchoMemoryRegistry is
 
     modifier onlySelfOrGrantedApp(address user) {
         if (msg.sender != user && !accessList[user][msg.sender]) revert NotAuthorized();
+        _;
+    }
+
+    modifier onlySelfOrWriteGrantedApp(address user) {
+        if (msg.sender != user && !writeAccessList[user][msg.sender]) revert NotAuthorized();
         _;
     }
 
@@ -90,6 +101,29 @@ contract EchoMemoryRegistry is
         vault.integrityHash = integrityHash;
         vault.updatedAt = uint64(block.timestamp);
         emit MemoryUpdated(msg.sender, cid, integrityHash, vault.updatedAt);
+    }
+
+    /**
+     * @notice Write or update a user's context on their behalf. Callable by
+     *         the user themself or by any AI tool address they've granted
+     *         write access to (a stronger, separate permission from read
+     *         access) — this is how a hosted service can save context for a
+     *         user without holding the user's own signing key.
+     * @param user The user whose vault is being written to.
+     * @param cid Filecoin/IPFS content identifier for the encrypted context blob.
+     * @param integrityHash Hash of the decrypted content, used client-side to
+     *        confirm the retrieved data matches what was written.
+     */
+    function updateMemoryFor(address user, string calldata cid, bytes32 integrityHash)
+        external
+        onlySelfOrWriteGrantedApp(user)
+    {
+        if (bytes(cid).length == 0) revert EmptyCid();
+        MemoryVault storage vault = vaults[user];
+        vault.cid = cid;
+        vault.integrityHash = integrityHash;
+        vault.updatedAt = uint64(block.timestamp);
+        emit MemoryUpdated(user, cid, integrityHash, vault.updatedAt);
     }
 
     /**
@@ -134,6 +168,35 @@ contract EchoMemoryRegistry is
     /// @notice Check whether a given AI tool currently has access to a user's context.
     function hasAccess(address user, address app) external view returns (bool) {
         return accessList[user][app];
+    }
+
+    /**
+     * @notice Grant a specific AI tool's address permission to write (overwrite)
+     *         your context, not just read it. This is a stronger permission than
+     *         grantAccess() and is intentionally separate — a tool you only want
+     *         to let read your context shouldn't automatically be able to
+     *         overwrite it too.
+     * @param app The address representing the AI tool requesting write access.
+     */
+    function grantWriteAccess(address app) external {
+        if (app == address(0)) revert NotAuthorized();
+        if (!writeAccessList[msg.sender][app]) {
+            writeAccessList[msg.sender][app] = true;
+            emit WriteAccessGranted(msg.sender, app);
+        }
+    }
+
+    /// @notice Revoke a previously granted tool's write access.
+    function revokeWriteAccess(address app) external {
+        if (writeAccessList[msg.sender][app]) {
+            writeAccessList[msg.sender][app] = false;
+            emit WriteAccessRevoked(msg.sender, app);
+        }
+    }
+
+    /// @notice Check whether a given AI tool currently has write access to a user's context.
+    function hasWriteAccess(address user, address app) external view returns (bool) {
+        return writeAccessList[user][app];
     }
 
     /**

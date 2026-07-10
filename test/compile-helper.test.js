@@ -60,7 +60,7 @@ describe('compile-helper.js', function () {
     const names = result.EchoMemoryRegistry.abi
       .filter((e) => e.type === 'event')
       .map((e) => e.name);
-    const expected = ['MemoryUpdated', 'AccessGranted', 'AccessRevoked', 'RenewalFunded', 'RenewalWithdrawn'];
+    const expected = ['MemoryUpdated', 'AccessGranted', 'AccessRevoked', 'WriteAccessGranted', 'WriteAccessRevoked', 'RenewalFunded', 'RenewalWithdrawn'];
     for (const ev of expected) {
       expect(names).to.include(ev);
     }
