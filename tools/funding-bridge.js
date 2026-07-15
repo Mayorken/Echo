@@ -78,30 +78,21 @@ async function fundVault(config) {
 
   log(`[funding-bridge] Funding vault for ${target} with ${config.amountInFil} FIL...`);
 
-  // fundRenewal() on V1 funds the caller's own vault (msg.sender).
-  // To fund a different address's vault, the signer must BE that address,
-  // or the owner must call fundRenewal() themselves. This bridge script is
-  // intended to be run by the vault owner using their own key.
-  if (target.toLowerCase() !== signer.address.toLowerCase()) {
-    throw new Error(
-      `Cannot fund a different address's vault with this key.\n` +
-      `The PRIVATE_KEY must belong to the vault owner (${target}).\n` +
-      `Each user runs this bridge script with their own key.`
-    );
-  }
-
-  const tx = await contract.fundRenewal({ value });
+  if (!ethers.isAddress(target)) throw new Error('targetAddress must be a valid address');
+  const tx = target.toLowerCase() === signer.address.toLowerCase()
+    ? await contract.fundRenewal({ value })
+    : await contract.fundRenewalFor(target, { value });
   log(`[funding-bridge] Transaction submitted: ${tx.hash}`);
   const receipt = await tx.wait();
   log(`[funding-bridge] Confirmed in block ${receipt.blockNumber}`);
 
-  const newBalance = await contract.renewalBalanceOf(signer.address);
+  const newBalance = await contract.renewalBalanceOf(target);
   log(`[funding-bridge] New renewal balance: ${ethers.formatEther(newBalance)} FIL`);
 
   return {
     txHash: tx.hash,
     from: signer.address,
-    target: signer.address,
+    target,
     amount: config.amountInFil,
     newBalanceFil: ethers.formatEther(newBalance),
   };
@@ -182,10 +173,6 @@ async function startStripeWebhook(config) {
       log(`[funding-bridge] Payment succeeded for ${echoAddress} — funding ${filAmount} FIL`);
 
       try {
-        // Note: because fundRenewal() credits msg.sender's vault, the bridge
-        // wallet and the echoAddress must be the same. For org-managed vaults
-        // (where the bridge wallet IS the vault owner), this works directly.
-        // For funding a user's own vault, the user must run the bridge themselves.
         const result = await fundVault({
           ...config,
           targetAddress: echoAddress,

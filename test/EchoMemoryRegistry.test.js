@@ -290,6 +290,13 @@ describe('EchoMemoryRegistry (running on a local in-process chain)', function ()
       expect(await registry.renewalBalanceOf(owner.address)).to.equal(ethers.parseEther('1.0'));
       expect(await registry.renewalBalanceOf(appA.address)).to.equal(ethers.parseEther('3.0'));
     });
+
+    it('allows a payment service to fund another user storage reserve', async function () {
+      const amount = ethers.parseEther('0.25');
+      await registry.connect(appA).fundRenewalFor(owner.address, { value: amount });
+      expect(await registry.renewalBalanceOf(owner.address)).to.equal(amount);
+      expect(await registry.renewalBalanceOf(appA.address)).to.equal(0n);
+    });
   });
 
   describe('re-entrancy guard', function () {

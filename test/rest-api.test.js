@@ -97,6 +97,9 @@ describe('integrations/rest-api.js', function () {
       storage,
       encryptionKey,
       operatorApiKey: 'test-operator-secret',
+      createCheckoutSession: async ({ plan, userAddress }) => ({
+        url: `https://checkout.stripe.test/${plan}/${userAddress}`,
+      }),
     });
   });
 
@@ -282,6 +285,14 @@ describe('integrations/rest-api.js', function () {
         expect(res.status).to.equal(200);
         expect(res.body.apps).to.be.an('array');
         expect(res.body.apps.some((entry) => entry.app === owner.address && entry.active)).to.equal(true);
+      });
+
+      it('creates a USD Stripe checkout for a storage plan', async function () {
+        const res = await request(app, 'POST', '/v1/billing/checkout', { plan: 'plus' }, {
+          Authorization: `Bearer ${apiKey}`,
+        });
+        expect(res.status).to.equal(200);
+        expect(res.body.checkoutUrl).to.include('checkout.stripe.test/plus');
       });
 
       it('rejects saving without write access granted', async function () {

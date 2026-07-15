@@ -213,6 +213,16 @@ contract EchoMemoryRegistry is
         emit RenewalFunded(msg.sender, msg.value, vault.renewalBalance);
     }
 
+    /// @notice Fund another user's storage reserve. Used by payment services
+    ///         that accept fiat from the user and settle the reserve in FIL.
+    function fundRenewalFor(address user) external payable {
+        if (user == address(0)) revert NotAuthorized();
+        if (msg.value == 0) revert ZeroFundAmount();
+        MemoryVault storage vault = vaults[user];
+        vault.renewalBalance += msg.value;
+        emit RenewalFunded(user, msg.value, vault.renewalBalance);
+    }
+
     /// @notice Withdraw any unused renewal funds back to the user.
     function withdrawRenewal(uint256 amount) external nonReentrant {
         MemoryVault storage vault = vaults[msg.sender];

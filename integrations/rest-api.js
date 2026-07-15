@@ -50,6 +50,7 @@ function createApp(config) {
     encryptionKey,
     operatorApiKey,
     corsOrigins = [],
+    createCheckoutSession,
   } = config;
 
   const app = express();
@@ -465,6 +466,24 @@ function createApp(config) {
     }
   });
 
+  /** Create a Stripe Checkout session for a USD-denominated storage plan. */
+  app.post('/v1/billing/checkout', requireApiKey, async (req, res) => {
+    try {
+      if (!createCheckoutSession) {
+        return res.status(503).json({ error: 'Billing is not configured' });
+      }
+      const plan = req.body && req.body.plan;
+      if (!['starter', 'plus', 'team'].includes(plan)) {
+        return res.status(400).json({ error: 'Unknown storage plan' });
+      }
+      const session = await createCheckoutSession({ plan, userAddress: req.userAddress });
+      res.json({ checkoutUrl: session.url });
+    } catch (err) {
+      console.error('POST /v1/billing/checkout error:', err.message);
+      res.status(500).json({ error: 'Unable to start checkout' });
+    }
+  });
+
   return app;
 }
 
@@ -476,6 +495,9 @@ async function startServer() {
   const encryptionKeyHex = process.env.ENCRYPTION_KEY;
   const operatorApiKey = process.env.OPERATOR_API_KEY;
   const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map((v) => v.trim()).filter(Boolean);
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+  const appUrl = process.env.APP_URL || 'http://127.0.0.1:4173';
+  const filUsdPrice = Number(process.env.FIL_USD_PRICE || 0);
   const port = Number(process.env.PORT) || 3000;
 
   if (!rpcUrl) { console.error('Error: RPC_URL required'); process.exit(1); }
@@ -505,6 +527,38 @@ async function startServer() {
     console.log('Generated key (save this):', Buffer.from(encryptionKey).toString('hex'));
   }
 
+  let createCheckoutSession;
+  if (stripeSecretKey) {
+    if (!(filUsdPrice > 0)) throw new Error('FIL_USD_PRICE must be set when Stripe billing is enabled');
+    const stripe = require('stripe')(stripeSecretKey);
+    const plans = {
+      starter: { name: 'Echo Starter Storage', cents: 500 },
+      plus: { name: 'Echo Plus Storage', cents: 1500 },
+      team: { name: 'Echo Team Storage', cents: 4000 },
+    };
+    createCheckoutSession = async ({ plan, userAddress }) => {
+      const selected = plans[plan];
+      const usd = selected.cents / 100;
+      const filAmount = (usd / filUsdPrice).toFixed(8);
+      const metadata = { echoAddress: userAddress, filAmount, plan, storageUsd: usd.toFixed(2) };
+      return stripe.checkout.sessions.create({
+        mode: 'payment',
+        line_items: [{
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: selected.cents,
+            product_data: { name: selected.name },
+          },
+        }],
+        metadata,
+        payment_intent_data: { metadata },
+        success_url: `${appUrl}/?payment=success`,
+        cancel_url: `${appUrl}/?payment=cancelled`,
+      });
+    };
+  }
+
   const app = createApp({
     rpcUrl,
     contractAddress,
@@ -513,6 +567,7 @@ async function startServer() {
     encryptionKey,
     operatorApiKey,
     corsOrigins,
+    createCheckoutSession,
   });
 
   app.listen(port, () => {

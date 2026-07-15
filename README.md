@@ -92,7 +92,7 @@ they authorize.
 - **`compile.js`** / **`compile-helper.js`** — compile the contract(s) and
   produce the ABI (`EchoMemoryRegistry.abi.json`, already generated).
 
-Run `npm test` yourself — 148 tests passing, no network access required.
+Run `npm test` yourself — 150 tests passing, no network access required.
 
 ## How the pitch maps to the code
 
@@ -312,7 +312,7 @@ npm test               # full test suite against local chain
 ```
 npm install
 npm run compile   # compiles the contract, regenerates the ABI
-npm test          # 148 tests, real local chain, no network needed
+npm test          # 150 tests, real local chain, no network needed
 npm run smoke     # 8 live checks against the Calibration deployment
 ```
 
@@ -395,6 +395,9 @@ plus the V3 vault tools: `echo_create_vault`, `echo_save_vault_context`,
 | `ENCRYPTION_KEY` | No | Hex-encoded 32-byte key (generated if omitted) |
 | `OPERATOR_API_KEY` | No | Secret required for signer-backed self-hosted routes. Those routes are disabled if omitted. |
 | `CORS_ORIGINS` | No | Comma-separated browser origins allowed to call the API. CORS is disabled if omitted. |
+| `STRIPE_SECRET_KEY` | No | Enables USD Stripe Checkout for storage plans. |
+| `FIL_USD_PRICE` | With Stripe | Current FIL/USD settlement price used to calculate the user's storage reserve. |
+| `APP_URL` | No | Dashboard URL used for Stripe success/cancel redirects. |
 | `PORT` | No | REST API port (default: 3000) |
 
 Hosted users authenticate with wallet ownership proof: call
@@ -407,6 +410,19 @@ The repository root also contains `index.html`, a responsive connector console
 for wallet authentication, context save/load, connector status, and live access
 review. Configure `CORS_ORIGINS` with the dashboard's origin when serving it
 from a separate host.
+
+### USD storage billing
+
+The dashboard presents storage entirely in USD and redirects customers to
+Stripe Checkout. After payment, Stripe metadata identifies the Echo account
+and the FIL amount calculated from `FIL_USD_PRICE`. The funding bridge then
+calls `fundRenewalFor(user)` so the service treasury credits that user's
+storage reserve; users never handle FIL themselves.
+
+The treasury wallet must already hold enough FIL to settle confirmed payments.
+Production operators should replenish it through their chosen regulated
+exchange or liquidity provider and update `FIL_USD_PRICE` from a trusted price
+feed rather than maintaining it manually.
 
 ## Suggested next steps for a real build
 
