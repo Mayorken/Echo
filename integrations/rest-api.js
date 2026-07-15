@@ -27,6 +27,7 @@ const rateLimit = require('express-rate-limit');
 const { ethers } = require('ethers');
 const { EchoClient, generateEncryptionKey } = require('../echo-sdk');
 const { createSynapseStorage } = require('../lib/storage');
+const { fundVault } = require('../tools/funding-bridge');
 const {
   generateApiKey,
   validateApiKey,
@@ -51,6 +52,9 @@ function createApp(config) {
     operatorApiKey,
     corsOrigins = [],
     createCheckoutSession,
+    stripe,
+    stripeWebhookSecret,
+    fundSuccessfulPayment,
   } = config;
 
   const app = express();
@@ -58,6 +62,48 @@ function createApp(config) {
   if (corsOrigins.length > 0) {
     app.use(cors({ origin: corsOrigins }));
   }
+
+  // Stripe signatures must be verified against the unparsed request body.
+  // Register this route before the JSON body parser used by the rest of the API.
+  const processedPaymentIntents = new Set();
+  app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    if (!stripe || !stripeWebhookSecret || !fundSuccessfulPayment) {
+      return res.status(503).json({ error: 'Stripe webhook is not configured' });
+    }
+
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        req.headers['stripe-signature'],
+        stripeWebhookSecret,
+      );
+    } catch (err) {
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    if (event.type === 'payment_intent.succeeded') {
+      const intent = event.data.object;
+      if (processedPaymentIntents.has(intent.id)) return res.json({ received: true });
+
+      const echoAddress = intent.metadata && intent.metadata.echoAddress;
+      const filAmount = intent.metadata && intent.metadata.filAmount;
+      if (!ethers.isAddress(echoAddress || '') || !filAmount) {
+        return res.json({ received: true });
+      }
+
+      try {
+        await fundSuccessfulPayment({ echoAddress, filAmount, paymentIntentId: intent.id });
+        processedPaymentIntents.add(intent.id);
+      } catch (err) {
+        console.error(`Stripe funding failed for ${intent.id}:`, err.message);
+        return res.status(500).json({ received: false, error: 'Storage funding failed' });
+      }
+    }
+
+    return res.json({ received: true });
+  });
+
   app.use(express.json({ limit: '1mb' }));
   app.use(rateLimit({ windowMs: 60000, max: 60, standardHeaders: true, legacyHeaders: false }));
 
@@ -496,6 +542,7 @@ async function startServer() {
   const operatorApiKey = process.env.OPERATOR_API_KEY;
   const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map((v) => v.trim()).filter(Boolean);
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+  const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   const appUrl = process.env.APP_URL || 'http://127.0.0.1:4173';
   const filUsdPrice = Number(process.env.FIL_USD_PRICE || 0);
   const port = Number(process.env.PORT) || 3000;
@@ -528,9 +575,11 @@ async function startServer() {
   }
 
   let createCheckoutSession;
+  let stripe;
+  let fundSuccessfulPayment;
   if (stripeSecretKey) {
     if (!(filUsdPrice > 0)) throw new Error('FIL_USD_PRICE must be set when Stripe billing is enabled');
-    const stripe = require('stripe')(stripeSecretKey);
+    stripe = require('stripe')(stripeSecretKey);
     const plans = {
       starter: { name: 'Echo Starter Storage', cents: 500 },
       plus: { name: 'Echo Plus Storage', cents: 1500 },
@@ -557,6 +606,16 @@ async function startServer() {
         cancel_url: `${appUrl}/?payment=cancelled`,
       });
     };
+
+    if (stripeWebhookSecret) {
+      fundSuccessfulPayment = ({ echoAddress, filAmount }) => fundVault({
+        rpcUrl,
+        contractAddress,
+        privateKey,
+        targetAddress: echoAddress,
+        amountInFil: filAmount,
+      });
+    }
   }
 
   const app = createApp({
@@ -568,6 +627,9 @@ async function startServer() {
     operatorApiKey,
     corsOrigins,
     createCheckoutSession,
+    stripe,
+    stripeWebhookSecret,
+    fundSuccessfulPayment,
   });
 
   app.listen(port, () => {

@@ -4,6 +4,7 @@
   "description": "Echo: portable AI-companion memory layer on Filecoin's FEVM",
   "main": "echo-sdk.js",
   "scripts": {
+    "start": "node integrations/rest-api.js",
     "demo": "node demo.js",
     "smoke": "node tools/smoke-test.js",
     "compile": "node compile.js",

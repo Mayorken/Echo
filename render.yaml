@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: echo-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SYNAPSE_CHAIN
+        value: calibration
+      - key: RPC_URL
+        value: https://api.calibration.node.glif.io/rpc/v1
+      - key: CONTRACT_ADDRESS
+        value: 0x962C42f208d89D5bF1698E3397BC78176D70cE0c
+      - key: PRIVATE_KEY
+        sync: false
+      - key: SYNAPSE_PRIVATE_KEY
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: OPERATOR_API_KEY
+        generateValue: true
+      - key: APP_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: FIL_USD_PRICE
+        sync: false
