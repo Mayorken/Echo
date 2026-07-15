@@ -92,7 +92,7 @@ they authorize.
 - **`compile.js`** / **`compile-helper.js`** — compile the contract(s) and
   produce the ABI (`EchoMemoryRegistry.abi.json`, already generated).
 
-Run `npm test` yourself — 147 tests passing, no network access required.
+Run `npm test` yourself — 148 tests passing, no network access required.
 
 ## How the pitch maps to the code
 
@@ -312,7 +312,7 @@ npm test               # full test suite against local chain
 ```
 npm install
 npm run compile   # compiles the contract, regenerates the ABI
-npm test          # 147 tests, real local chain, no network needed
+npm test          # 148 tests, real local chain, no network needed
 npm run smoke     # 8 live checks against the Calibration deployment
 ```
 
@@ -402,6 +402,11 @@ Hosted users authenticate with wallet ownership proof: call
 send `userAddress` and `signature` to `POST /v1/auth/signup`. Issued API keys
 expire after 24 hours, and every authenticated request re-checks the user's
 on-chain access grant.
+
+The repository root also contains `index.html`, a responsive connector console
+for wallet authentication, context save/load, connector status, and live access
+review. Configure `CORS_ORIGINS` with the dashboard's origin when serving it
+from a separate host.
 
 ## Suggested next steps for a real build
 

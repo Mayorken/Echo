@@ -275,6 +275,15 @@ describe('integrations/rest-api.js', function () {
         expect(res.body.context).to.equal(null);
       });
 
+      it('lists access grants through the authenticated endpoint', async function () {
+        const res = await request(app, 'GET', '/v1/access', null, {
+          Authorization: `Bearer ${apiKey}`,
+        });
+        expect(res.status).to.equal(200);
+        expect(res.body.apps).to.be.an('array');
+        expect(res.body.apps.some((entry) => entry.app === owner.address && entry.active)).to.equal(true);
+      });
+
       it('rejects saving without write access granted', async function () {
         const res = await request(app, 'POST', '/v1/context', { context: { hello: 'world' } }, {
           Authorization: `Bearer ${apiKey}`,

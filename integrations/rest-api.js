@@ -454,6 +454,17 @@ function createApp(config) {
     }
   });
 
+  /** GET /v1/access — list the authenticated user's current grants. */
+  app.get('/v1/access', requireApiKey, async (req, res) => {
+    try {
+      const apps = await client.listAccess(req.userAddress);
+      res.json({ apps });
+    } catch (err) {
+      console.error('GET /v1/access error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
   return app;
 }
 
@@ -503,6 +514,7 @@ async function startServer() {
     operatorApiKey,
     corsOrigins,
   });
+
   app.listen(port, () => {
     console.log(`Echo REST API running on http://localhost:${port}`);
     console.log(`Contract: ${contractAddress}`);
