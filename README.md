@@ -92,7 +92,7 @@ they authorize.
 - **`compile.js`** / **`compile-helper.js`** — compile the contract(s) and
   produce the ABI (`EchoMemoryRegistry.abi.json`, already generated).
 
-Run `npm test` yourself — 114 tests passing, no network access required.
+Run `npm test` yourself — 147 tests passing, no network access required.
 
 ## How the pitch maps to the code
 
@@ -312,7 +312,7 @@ npm test               # full test suite against local chain
 ```
 npm install
 npm run compile   # compiles the contract, regenerates the ABI
-npm test          # 18 tests, real local chain, no network needed
+npm test          # 147 tests, real local chain, no network needed
 npm run smoke     # 8 live checks against the Calibration deployment
 ```
 
@@ -393,7 +393,15 @@ plus the V3 vault tools: `echo_create_vault`, `echo_save_vault_context`,
 | `PRIVATE_KEY` | Yes | Wallet private key for signing txs |
 | `SYNAPSE_PRIVATE_KEY` | Yes | Private key for Synapse SDK Filecoin storage |
 | `ENCRYPTION_KEY` | No | Hex-encoded 32-byte key (generated if omitted) |
+| `OPERATOR_API_KEY` | No | Secret required for signer-backed self-hosted routes. Those routes are disabled if omitted. |
+| `CORS_ORIGINS` | No | Comma-separated browser origins allowed to call the API. CORS is disabled if omitted. |
 | `PORT` | No | REST API port (default: 3000) |
+
+Hosted users authenticate with wallet ownership proof: call
+`POST /v1/auth/challenge` with `userAddress`, sign the returned `message`, then
+send `userAddress` and `signature` to `POST /v1/auth/signup`. Issued API keys
+expire after 24 hours, and every authenticated request re-checks the user's
+on-chain access grant.
 
 ## Suggested next steps for a real build
 

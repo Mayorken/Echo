@@ -23,22 +23,22 @@ const { ethers } = require('ethers');
  */
 async function scanFundedVaults(contract, options) {
   const fromBlock = (options && options.fromBlock) || 0;
+  const vaultIndex = (options && options.vaultIndex) || new Map();
 
   const memoryFilter = contract.filters.MemoryUpdated();
   const memoryEvents = await contract.queryFilter(memoryFilter, fromBlock);
 
   let lastBlock = fromBlock;
-  const latestCidByUser = new Map();
   for (const event of memoryEvents) {
     const user = event.args[0];
     const cid = event.args[1];
     const integrityHash = event.args[2];
-    latestCidByUser.set(user, { cid, integrityHash });
+    vaultIndex.set(user, { cid, integrityHash });
     if (event.blockNumber > lastBlock) lastBlock = event.blockNumber;
   }
 
   const fundedVaults = [];
-  for (const [user, { cid, integrityHash }] of latestCidByUser) {
+  for (const [user, { cid, integrityHash }] of vaultIndex) {
     if (!cid) continue;
     const balance = await contract.renewalBalanceOf(user);
     if (balance > 0n) {
@@ -46,7 +46,7 @@ async function scanFundedVaults(contract, options) {
     }
   }
 
-  return { vaults: fundedVaults, lastBlock };
+  return { vaults: fundedVaults, lastBlock, vaultIndex };
 }
 
 module.exports = { scanFundedVaults };

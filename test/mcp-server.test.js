@@ -51,8 +51,8 @@ describe('integrations/mcp-server.js', function () {
   });
 
   describe('TOOL_DEFINITIONS', function () {
-    it('exports 7 tool definitions', function () {
-      expect(TOOL_DEFINITIONS).to.have.length(7);
+    it('exports 13 tool definitions', function () {
+      expect(TOOL_DEFINITIONS).to.have.length(13);
       const names = TOOL_DEFINITIONS.map((t) => t.name);
       expect(names).to.include('echo_save_context');
       expect(names).to.include('echo_load_context');
@@ -263,7 +263,7 @@ describe('integrations/mcp-server.js', function () {
         method: 'tools/list',
       }), handleToolCall);
       const resp = JSON.parse(output[0].trim());
-      expect(resp.result.tools).to.have.length(7);
+      expect(resp.result.tools).to.have.length(13);
     });
 
     it('responds to tools/call', async function () {

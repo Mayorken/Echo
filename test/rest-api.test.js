@@ -32,7 +32,11 @@ function request(app, method, path, body, headers) {
         port,
         path,
         method: method.toUpperCase(),
-        headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+        headers: Object.assign(
+          { 'Content-Type': 'application/json' },
+          headers === false ? {} : { 'X-Echo-Operator-Key': 'test-operator-secret' },
+          headers || {}
+        ),
       };
       const req = http.request(options, (res) => {
         let data = '';
@@ -53,18 +57,32 @@ function request(app, method, path, body, headers) {
   });
 }
 
+async function signedSignup(app, signer) {
+  const challenge = await request(app, 'POST', '/v1/auth/challenge', {
+    userAddress: signer.address,
+  });
+  const signature = await signer.signMessage(challenge.body.message);
+  return request(app, 'POST', '/v1/auth/signup', {
+    userAddress: signer.address,
+    signature,
+  });
+}
+
 describe('integrations/rest-api.js', function () {
   this.timeout(30000);
 
-  let contracts, provider, owner, stranger, app, encryptionKey, registry;
+  let contracts, provider, owner, stranger, ownerAuth, strangerAuth, app, encryptionKey, registry;
 
   before(async function () {
     contracts = compileAll();
     const ganacheProvider = ganache.provider({ logging: { quiet: true } });
+    const initialAccounts = Object.values(ganacheProvider.getInitialAccounts());
     provider = new ethers.BrowserProvider(ganacheProvider, undefined, { cacheTimeout: -1 });
     const accounts = await provider.listAccounts();
     owner = await provider.getSigner(accounts[0].address);
     stranger = await provider.getSigner(accounts[1].address);
+    ownerAuth = new ethers.Wallet(initialAccounts[0].secretKey);
+    strangerAuth = new ethers.Wallet(initialAccounts[1].secretKey);
     encryptionKey = await generateKey();
   });
 
@@ -78,6 +96,7 @@ describe('integrations/rest-api.js', function () {
       signer: owner,
       storage,
       encryptionKey,
+      operatorApiKey: 'test-operator-secret',
     });
   });
 
@@ -92,6 +111,11 @@ describe('integrations/rest-api.js', function () {
   });
 
   describe('POST /context/save', function () {
+    it('rejects requests without the operator key', async function () {
+      const res = await request(app, 'POST', '/context/save', { context: {} }, false);
+      expect(res.status).to.equal(401);
+    });
+
     it('saves context and returns cid + integrityHash', async function () {
       const res = await request(app, 'POST', '/context/save', {
         context: { project: 'Echo', stack: 'Solidity + Node.js' },
@@ -194,14 +218,14 @@ describe('integrations/rest-api.js', function () {
 
     describe('POST /v1/auth/signup', function () {
       it('rejects an address that has not granted read access', async function () {
-        const res = await request(app, 'POST', '/v1/auth/signup', { userAddress: stranger.address });
+        const res = await signedSignup(app, strangerAuth);
         expect(res.status).to.equal(403);
         expect(res.body.error).to.include('grantAccess');
       });
 
       it('issues an API key once read access is granted', async function () {
         await registry.connect(stranger).grantAccess(owner.address);
-        const res = await request(app, 'POST', '/v1/auth/signup', { userAddress: stranger.address });
+        const res = await signedSignup(app, strangerAuth);
         expect(res.status).to.equal(200);
         expect(res.body.apiKey).to.match(/^echo_[0-9a-f]{64}$/);
         expect(res.body.userAddress).to.equal(stranger.address);
@@ -211,6 +235,15 @@ describe('integrations/rest-api.js', function () {
         const res = await request(app, 'POST', '/v1/auth/signup', { userAddress: 'not-an-address' });
         expect(res.status).to.equal(400);
       });
+
+      it('rejects signup without proof of wallet ownership', async function () {
+        await registry.connect(stranger).grantAccess(owner.address);
+        const res = await request(app, 'POST', '/v1/auth/signup', {
+          userAddress: stranger.address,
+          signature: await ownerAuth.signMessage('not the issued challenge'),
+        });
+        expect(res.status).to.equal(401);
+      });
     });
 
     describe('GET /v1/context and POST /v1/context', function () {
@@ -219,7 +252,7 @@ describe('integrations/rest-api.js', function () {
       beforeEach(async function () {
         keyHex = Buffer.from(encryptionKey).toString('hex');
         await registry.connect(stranger).grantAccess(owner.address);
-        const signupRes = await request(app, 'POST', '/v1/auth/signup', { userAddress: stranger.address });
+        const signupRes = await signedSignup(app, strangerAuth);
         apiKey = signupRes.body.apiKey;
       });
 

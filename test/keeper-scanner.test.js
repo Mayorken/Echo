@@ -84,4 +84,21 @@ describe('keeper/scanner.js', function () {
     expect(addresses).to.include(owner.address);
     expect(addresses).to.include(userA.address);
   });
+
+  it('retains previously discovered vaults when scanning from a later block', async function () {
+    const hash = ethers.keccak256(ethers.toUtf8Bytes('persistent'));
+    await registry.connect(owner).updateMemory('QmPersistentCid', hash);
+    await registry.connect(owner).fundRenewal({ value: ethers.parseEther('1.0') });
+
+    const first = await scanFundedVaults(registry);
+    const laterBlock = first.lastBlock + 1;
+    const second = await scanFundedVaults(registry, {
+      fromBlock: laterBlock,
+      vaultIndex: first.vaultIndex,
+    });
+
+    expect(second.vaults).to.have.length(1);
+    expect(second.vaults[0].user).to.equal(owner.address);
+    expect(second.vaults[0].cid).to.equal('QmPersistentCid');
+  });
 });

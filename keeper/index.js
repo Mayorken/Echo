@@ -70,7 +70,10 @@ async function runSweep(config) {
     chain: config.chain,
   });
 
-  const { vaults, lastBlock } = await scanFundedVaults(contract, { fromBlock: config.fromBlock || 0 });
+  const { vaults, lastBlock, vaultIndex } = await scanFundedVaults(contract, {
+    fromBlock: config.fromBlock || 0,
+    vaultIndex: config.vaultIndex,
+  });
   log(`[keeper] Found ${vaults.length} funded vault(s) (scanned to block ${lastBlock})`);
 
   const results = [];
@@ -142,7 +145,7 @@ async function runSweep(config) {
 
   log(`[keeper] Sweep complete: ${vaults.length} scanned, ${renewed} renewed, ${errors} errors`);
 
-  return { scanned: vaults.length, renewed, errors, lastBlock, results };
+  return { scanned: vaults.length, renewed, errors, lastBlock, results, vaultIndex };
 }
 
 /**
@@ -158,6 +161,7 @@ function startKeeper(config) {
   let timer = null;
   let running = false;
   let nextFromBlock = config.fromBlock || 0;
+  const vaultIndex = config.vaultIndex || new Map();
 
   async function sweep() {
     if (running) {
@@ -166,7 +170,7 @@ function startKeeper(config) {
     }
     running = true;
     try {
-      const result = await runSweep({ ...config, fromBlock: nextFromBlock });
+      const result = await runSweep({ ...config, fromBlock: nextFromBlock, vaultIndex });
       if (result.lastBlock > nextFromBlock) {
         nextFromBlock = result.lastBlock;
       }

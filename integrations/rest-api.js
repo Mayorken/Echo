@@ -27,7 +27,12 @@ const rateLimit = require('express-rate-limit');
 const { ethers } = require('ethers');
 const { EchoClient, generateEncryptionKey } = require('../echo-sdk');
 const { createSynapseStorage } = require('../lib/storage');
-const { generateApiKey, validateApiKey } = require('../lib/apiKeys');
+const {
+  generateApiKey,
+  validateApiKey,
+  createAuthChallenge,
+  consumeAuthChallenge,
+} = require('../lib/apiKeys');
 
 function parseHexKey(hex, headerName) {
   if (typeof hex !== 'string' || !/^[0-9a-fA-F]{64}$/.test(hex)) {
@@ -43,11 +48,15 @@ function createApp(config) {
     signer,
     storage,
     encryptionKey,
+    operatorApiKey,
+    corsOrigins = [],
   } = config;
 
   const app = express();
   app.use(helmet());
-  app.use(cors());
+  if (corsOrigins.length > 0) {
+    app.use(cors({ origin: corsOrigins }));
+  }
   app.use(express.json({ limit: '1mb' }));
   app.use(rateLimit({ windowMs: 60000, max: 60, standardHeaders: true, legacyHeaders: false }));
 
@@ -56,6 +65,17 @@ function createApp(config) {
 
   app.get('/health', (req, res) => {
     res.json({ status: 'ok', contractAddress, timestamp: new Date().toISOString() });
+  });
+
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/v1/')) return next();
+    if (!operatorApiKey) {
+      return res.status(503).json({ error: 'Self-hosted operator routes are disabled' });
+    }
+    if (req.get('X-Echo-Operator-Key') !== operatorApiKey) {
+      return res.status(401).json({ error: 'Missing or invalid operator key' });
+    }
+    next();
   });
 
   /**
@@ -316,6 +336,18 @@ function createApp(config) {
   // than implying it's identical to the fully client-side model.
 
   /**
+   * POST /v1/auth/challenge
+   * Create a short-lived message the user must sign with their wallet.
+   */
+  app.post('/v1/auth/challenge', (req, res) => {
+    const { userAddress } = req.body;
+    if (!userAddress || !ethers.isAddress(userAddress)) {
+      return res.status(400).json({ error: 'Valid "userAddress" is required' });
+    }
+    res.json(createAuthChallenge(userAddress));
+  });
+
+  /**
    * POST /v1/auth/signup
    * Issue an API key for a user who has already granted this server's wallet
    * read access on-chain. Body: { userAddress: "0x..." }
@@ -325,9 +357,25 @@ function createApp(config) {
       if (!serviceWalletAddress) {
         return res.status(503).json({ error: 'Hosted mode is not configured on this server' });
       }
-      const { userAddress } = req.body;
+      const { userAddress, signature } = req.body;
       if (!userAddress || !ethers.isAddress(userAddress)) {
         return res.status(400).json({ error: 'Valid "userAddress" is required' });
+      }
+      if (!signature || typeof signature !== 'string') {
+        return res.status(400).json({ error: 'Wallet signature is required' });
+      }
+      const challenge = consumeAuthChallenge(userAddress);
+      if (!challenge) {
+        return res.status(401).json({ error: 'Authentication challenge is missing or expired' });
+      }
+      let recovered;
+      try {
+        recovered = ethers.verifyMessage(challenge.message, signature);
+      } catch {
+        return res.status(401).json({ error: 'Invalid wallet signature' });
+      }
+      if (recovered.toLowerCase() !== userAddress.toLowerCase()) {
+        return res.status(401).json({ error: 'Signature does not match userAddress' });
       }
       const granted = await client.contract.hasAccess(userAddress, serviceWalletAddress);
       if (!granted) {
@@ -343,12 +391,21 @@ function createApp(config) {
     }
   });
 
-  function requireApiKey(req, res, next) {
+  async function requireApiKey(req, res, next) {
     const header = req.get('Authorization') || '';
     const apiKey = header.startsWith('Bearer ') ? header.slice(7) : null;
     const record = apiKey ? validateApiKey(apiKey) : null;
     if (!record) {
       return res.status(401).json({ error: 'Missing or invalid API key' });
+    }
+    try {
+      const stillGranted = await client.contract.hasAccess(record.userAddress, serviceWalletAddress);
+      if (!stillGranted) {
+        return res.status(403).json({ error: 'On-chain access has been revoked' });
+      }
+    } catch (err) {
+      console.error('API key authorization check error:', err.message);
+      return res.status(503).json({ error: 'Authorization service unavailable' });
     }
     req.userAddress = record.userAddress;
     next();
@@ -406,12 +463,17 @@ async function startServer() {
   const privateKey = process.env.PRIVATE_KEY;
   const synapsePrivateKey = process.env.SYNAPSE_PRIVATE_KEY;
   const encryptionKeyHex = process.env.ENCRYPTION_KEY;
+  const operatorApiKey = process.env.OPERATOR_API_KEY;
+  const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map((v) => v.trim()).filter(Boolean);
   const port = Number(process.env.PORT) || 3000;
 
   if (!rpcUrl) { console.error('Error: RPC_URL required'); process.exit(1); }
   if (!contractAddress) { console.error('Error: CONTRACT_ADDRESS required'); process.exit(1); }
   if (!privateKey) { console.error('Error: PRIVATE_KEY required'); process.exit(1); }
   if (!synapsePrivateKey) { console.error('Error: SYNAPSE_PRIVATE_KEY required'); process.exit(1); }
+  if (!operatorApiKey) {
+    console.warn('Warning: OPERATOR_API_KEY is not set; signer-backed self-hosted routes are disabled');
+  }
 
   const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { cacheTimeout: -1 });
   const signer = new ethers.Wallet(privateKey, provider);
@@ -421,6 +483,9 @@ async function startServer() {
 
   let encryptionKey;
   if (encryptionKeyHex) {
+    if (!/^[0-9a-fA-F]{64}$/.test(encryptionKeyHex)) {
+      throw new Error('ENCRYPTION_KEY must be exactly 64 hexadecimal characters (32 bytes)');
+    }
     encryptionKey = Uint8Array.from(Buffer.from(encryptionKeyHex, 'hex'));
   } else {
     console.warn('Warning: No ENCRYPTION_KEY set — generating a temporary one (will not persist across restarts)');
@@ -429,7 +494,15 @@ async function startServer() {
     console.log('Generated key (save this):', Buffer.from(encryptionKey).toString('hex'));
   }
 
-  const app = createApp({ rpcUrl, contractAddress, signer, storage, encryptionKey });
+  const app = createApp({
+    rpcUrl,
+    contractAddress,
+    signer,
+    storage,
+    encryptionKey,
+    operatorApiKey,
+    corsOrigins,
+  });
   app.listen(port, () => {
     console.log(`Echo REST API running on http://localhost:${port}`);
     console.log(`Contract: ${contractAddress}`);

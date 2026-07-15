@@ -166,8 +166,6 @@ async function startStripeWebhook(config) {
         log(`[funding-bridge] Duplicate delivery of ${intent.id} — skipping`);
         return res.json({ received: true });
       }
-      processedIntents.add(intent.id);
-
       const echoAddress = intent.metadata && intent.metadata.echoAddress;
       const filAmount = intent.metadata && intent.metadata.filAmount;
 
@@ -193,9 +191,11 @@ async function startStripeWebhook(config) {
           targetAddress: echoAddress,
           amountInFil: filAmount,
         });
+        processedIntents.add(intent.id);
         log(`[funding-bridge] Funded tx=${result.txHash} newBalance=${result.newBalanceFil} FIL`);
       } catch (fundErr) {
         log(`[funding-bridge] Funding failed for ${echoAddress}: ${fundErr.message}`);
+        return res.status(500).json({ received: false, error: 'On-chain funding failed' });
       }
     }
 
