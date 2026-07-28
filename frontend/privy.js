@@ -54,7 +54,16 @@ async function initialize() {
     user = session.user;
     history.replaceState({}, document.title, window.location.pathname);
   } else {
-    ({ user } = await client.user.get());
+    try {
+      ({ user } = await client.user.get());
+    } catch (error) {
+      // A first-time visitor has no stored Privy session yet. The core SDK
+      // reports that normal signed-out state as an error.
+      if (!/no tokens found in storage/i.test(error && error.message ? error.message : String(error))) {
+        throw error;
+      }
+      user = null;
+    }
   }
   return { configured: true, user };
 }
@@ -63,7 +72,9 @@ async function signInWithGoogle() {
   await initialize();
   if (!client) throw new Error('Google sign-in is not configured');
   const redirectURI = `${window.location.origin}${window.location.pathname}`;
-  const oauthURL = await client.auth.oauth.generateURL('google', redirectURI);
+  const oauthResult = await client.auth.oauth.generateURL('google', redirectURI);
+  const oauthURL = typeof oauthResult === 'string' ? oauthResult : oauthResult.url;
+  if (!oauthURL) throw new Error('Privy did not return a Google sign-in URL');
   window.location.assign(oauthURL);
 }
 
