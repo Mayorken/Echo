@@ -396,7 +396,10 @@ plus the V3 vault tools: `echo_create_vault`, `echo_save_vault_context`,
 | `OPERATOR_API_KEY` | No | Secret required for signer-backed self-hosted routes. Those routes are disabled if omitted. |
 | `CORS_ORIGINS` | No | Comma-separated browser origins allowed to call the API. CORS is disabled if omitted. |
 | `STRIPE_SECRET_KEY` | No | Enables USD Stripe Checkout for storage plans. |
-| `FIL_USD_PRICE` | With Stripe | Current FIL/USD settlement price used to calculate the user's storage reserve. |
+| `STRIPE_WEBHOOK_SECRET` | With Stripe | Verifies Stripe events sent to `POST /stripe-webhook`. |
+| `STORAGE_TREASURY_READY` | With Stripe | Must be `true` only after the managed reserve has enough USDFC for storage and FIL for gas. |
+| `ENABLE_WALLET_BOOTSTRAP` | No | Calibration-only gas bootstrap for new embedded wallets. |
+| `ONBOARDING_GAS_FIL` | No | Target testnet gas balance for onboarding (default: 0.02 FIL). |
 | `APP_URL` | No | Dashboard URL used for Stripe success/cancel redirects. |
 | `PORT` | No | REST API port (default: 3000) |
 
@@ -414,15 +417,24 @@ from a separate host.
 ### USD storage billing
 
 The dashboard presents storage entirely in USD and redirects customers to
-Stripe Checkout. After payment, Stripe metadata identifies the Echo account
-and the FIL amount calculated from `FIL_USD_PRICE`. The funding bridge then
-calls `fundRenewalFor(user)` so the service treasury credits that user's
-storage reserve; users never handle FIL themselves.
+Stripe Checkout. After payment, the webhook provisions USD-denominated Echo
+storage credit exactly once. Echo operates a managed reserve: USDFC pays
+Synapse storage costs and FIL pays network gas. The customer's card payment is
+for the Echo storage service and is not represented as a direct FIL purchase.
 
-The treasury wallet must already hold enough FIL to settle confirmed payments.
-Production operators should replenish it through their chosen regulated
-exchange or liquidity provider and update `FIL_USD_PRICE` from a trusted price
-feed rather than maintaining it manually.
+Set `STORAGE_TREASURY_READY=true` only after the treasury has sufficient USDFC
+and FIL. Failed provisioning remains retryable and does not activate credit.
+The billing ledger models `payment_received → provisioning → active`, with
+explicit retry and refund states for a durable database implementation.
+
+### Google sign-in and embedded wallets
+
+The dashboard includes a Privy-powered embedded-wallet adapter. Add the public
+Privy App ID and Client ID to `config.js`, enable Google in the Privy dashboard,
+then run `npm run build`. A Google login creates an EVM wallet without a browser
+extension or seed-phrase ceremony. On Calibration, optional wallet bootstrap
+funds only enough test FIL for the embedded wallet to approve Echo's read and
+write permissions.
 
 ## Suggested next steps for a real build
 

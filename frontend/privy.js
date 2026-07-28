@@ -1,0 +1,110 @@
+import Privy, {
+  LocalStorage,
+  getEntropyDetailsFromUser,
+  getUserEmbeddedEthereumWallet,
+} from '@privy-io/js-sdk-core';
+
+let client;
+let user;
+let provider;
+let secureFrame;
+let secureFrameReady;
+
+function config() {
+  return window.ECHO_CONFIG || {};
+}
+
+function isConfigured() {
+  const { privyAppId, privyClientId } = config();
+  return Boolean(privyAppId && privyClientId);
+}
+
+async function initialize() {
+  if (!isConfigured()) return { configured: false, user: null };
+  if (client) return { configured: true, user };
+
+  const { privyAppId, privyClientId } = config();
+  client = new Privy({
+    appId: privyAppId,
+    clientId: privyClientId,
+    storage: new LocalStorage(),
+  });
+  await client.initialize();
+
+  secureFrame = document.createElement('iframe');
+  secureFrame.src = client.embeddedWallet.getURL();
+  secureFrame.hidden = true;
+  secureFrame.title = 'Echo secure wallet';
+  secureFrameReady = new Promise((resolve) => {
+    secureFrame.addEventListener('load', resolve, { once: true });
+  });
+  document.body.appendChild(secureFrame);
+  client.setMessagePoster(secureFrame.contentWindow);
+  window.addEventListener('message', (event) => {
+    if (event.source !== secureFrame.contentWindow) return;
+    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+    client.embeddedWallet.onMessage(data);
+  });
+
+  const params = new URLSearchParams(window.location.search);
+  const oauthCode = params.get('privy_oauth_code');
+  const oauthState = params.get('privy_oauth_state');
+  if (oauthCode && oauthState) {
+    const session = await client.auth.oauth.loginWithCode(oauthCode, oauthState);
+    user = session.user;
+    history.replaceState({}, document.title, window.location.pathname);
+  } else {
+    ({ user } = await client.user.get());
+  }
+  return { configured: true, user };
+}
+
+async function signInWithGoogle() {
+  await initialize();
+  if (!client) throw new Error('Google sign-in is not configured');
+  const redirectURI = `${window.location.origin}${window.location.pathname}`;
+  const oauthURL = await client.auth.oauth.generateURL('google', redirectURI);
+  window.location.assign(oauthURL);
+}
+
+async function getWalletSession() {
+  await initialize();
+  if (!user) return null;
+  let wallet = getUserEmbeddedEthereumWallet(user);
+  if (!wallet) {
+    ({ user } = await client.embeddedWallet.create({}));
+    wallet = getUserEmbeddedEthereumWallet(user);
+  }
+  if (!wallet) throw new Error('Unable to create your secure Echo account');
+
+  if (!provider) {
+    await secureFrameReady;
+    const { entropyId, entropyIdVerifier } = getEntropyDetailsFromUser(user);
+    provider = await client.embeddedWallet.getEthereumProvider({
+      wallet,
+      entropyId,
+      entropyIdVerifier,
+    });
+  }
+  return {
+    address: wallet.address,
+    provider,
+    user,
+    accessToken: await client.getAccessToken(),
+  };
+}
+
+async function signOut() {
+  if (!client || !user) return;
+  await client.auth.logout({ userId: user.id });
+  user = null;
+  provider = null;
+}
+
+window.EchoPrivy = {
+  initialize,
+  isConfigured,
+  signInWithGoogle,
+  getWalletSession,
+  signOut,
+};

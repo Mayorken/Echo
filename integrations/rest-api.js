@@ -27,7 +27,7 @@ const rateLimit = require('express-rate-limit');
 const { ethers } = require('ethers');
 const { EchoClient, generateEncryptionKey } = require('../echo-sdk');
 const { createSynapseStorage } = require('../lib/storage');
-const { fundVault } = require('../tools/funding-bridge');
+const { BillingLedger } = require('../lib/billingLedger');
 const {
   generateApiKey,
   validateApiKey,
@@ -54,7 +54,9 @@ function createApp(config) {
     createCheckoutSession,
     stripe,
     stripeWebhookSecret,
-    fundSuccessfulPayment,
+    billingLedger,
+    provisionStorageCredit,
+    prepareOnboarding,
   } = config;
 
   const app = express();
@@ -65,9 +67,8 @@ function createApp(config) {
 
   // Stripe signatures must be verified against the unparsed request body.
   // Register this route before the JSON body parser used by the rest of the API.
-  const processedPaymentIntents = new Set();
   app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-    if (!stripe || !stripeWebhookSecret || !fundSuccessfulPayment) {
+    if (!stripe || !stripeWebhookSecret || !billingLedger || !provisionStorageCredit) {
       return res.status(503).json({ error: 'Stripe webhook is not configured' });
     }
 
@@ -84,20 +85,41 @@ function createApp(config) {
 
     if (event.type === 'payment_intent.succeeded') {
       const intent = event.data.object;
-      if (processedPaymentIntents.has(intent.id)) return res.json({ received: true });
-
       const echoAddress = intent.metadata && intent.metadata.echoAddress;
-      const filAmount = intent.metadata && intent.metadata.filAmount;
-      if (!ethers.isAddress(echoAddress || '') || !filAmount) {
+      const plan = intent.metadata && intent.metadata.plan;
+      const creditCents = Number(intent.metadata && intent.metadata.creditCents);
+      if (!ethers.isAddress(echoAddress || '') || !Number.isInteger(creditCents) || creditCents <= 0) {
         return res.json({ received: true });
       }
 
+      const payment = billingLedger.begin({
+        paymentIntentId: intent.id,
+        userAddress: echoAddress,
+        plan,
+        creditCents,
+      });
+      if (payment.state === 'active' || payment.state === 'refunded') {
+        return res.json({ received: true, state: payment.state });
+      }
+
       try {
-        await fundSuccessfulPayment({ echoAddress, filAmount, paymentIntentId: intent.id });
-        processedPaymentIntents.add(intent.id);
+        if (payment.state === 'payment_received' || payment.state === 'retrying') {
+          billingLedger.transition(intent.id, 'provisioning');
+        }
+        const receipt = await provisionStorageCredit({
+          userAddress: echoAddress,
+          creditCents,
+          plan,
+          paymentIntentId: intent.id,
+        });
+        billingLedger.transition(intent.id, 'active', { provisioningReceipt: receipt });
       } catch (err) {
-        console.error(`Stripe funding failed for ${intent.id}:`, err.message);
-        return res.status(500).json({ received: false, error: 'Storage funding failed' });
+        const latest = billingLedger.getPayment(intent.id);
+        if (latest && latest.state === 'provisioning') {
+          billingLedger.transition(intent.id, 'retrying', { error: err.message });
+        }
+        console.error(`Storage provisioning failed for ${intent.id}:`, err.message);
+        return res.status(500).json({ received: false, error: 'Storage provisioning failed' });
       }
     }
 
@@ -424,14 +446,37 @@ function createApp(config) {
       if (recovered.toLowerCase() !== userAddress.toLowerCase()) {
         return res.status(401).json({ error: 'Signature does not match userAddress' });
       }
-      const granted = await client.contract.hasAccess(userAddress, serviceWalletAddress);
-      if (!granted) {
+      const readGranted = await client.contract.hasAccess(userAddress, serviceWalletAddress);
+      const writeGranted = await client.contract.hasWriteAccess(userAddress, serviceWalletAddress);
+      let onboardingTransactions = [];
+      if ((!readGranted || !writeGranted) && prepareOnboarding) {
+        await prepareOnboarding(userAddress);
+        if (!readGranted) {
+          onboardingTransactions.push({
+            label: 'Enable secure access',
+            to: contractAddress,
+            data: client.contract.interface.encodeFunctionData('grantAccess', [serviceWalletAddress]),
+          });
+        }
+        if (!writeGranted) {
+          onboardingTransactions.push({
+            label: 'Enable secure updates',
+            to: contractAddress,
+            data: client.contract.interface.encodeFunctionData('grantWriteAccess', [serviceWalletAddress]),
+          });
+        }
+      } else if (!readGranted) {
         return res.status(403).json({
-          error: `Address ${userAddress} has not granted this service (${serviceWalletAddress}) read access yet. Call grantAccess() first.`,
+          error: `Address ${userAddress} has not granted this service (${serviceWalletAddress}) access yet. Call grantAccess() first.`,
         });
       }
       const apiKey = generateApiKey(userAddress);
-      res.json({ apiKey, userAddress });
+      res.json({
+        apiKey,
+        userAddress,
+        onboardingRequired: onboardingTransactions.length > 0,
+        onboardingTransactions,
+      });
     } catch (err) {
       console.error('POST /v1/auth/signup error:', err.message);
       res.status(500).json({ error: 'Internal server error' });
@@ -530,6 +575,14 @@ function createApp(config) {
     }
   });
 
+  /** Return the signed-in user's USD storage-credit and provisioning status. */
+  app.get('/v1/billing/status', requireApiKey, (req, res) => {
+    if (!billingLedger) {
+      return res.status(503).json({ error: 'Billing is not configured' });
+    }
+    res.json(billingLedger.getAccount(req.userAddress));
+  });
+
   return app;
 }
 
@@ -544,7 +597,9 @@ async function startServer() {
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
   const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   const appUrl = process.env.APP_URL || 'http://127.0.0.1:4173';
-  const filUsdPrice = Number(process.env.FIL_USD_PRICE || 0);
+  const storageTreasuryReady = process.env.STORAGE_TREASURY_READY === 'true';
+  const walletBootstrapEnabled = process.env.ENABLE_WALLET_BOOTSTRAP === 'true';
+  const onboardingGasFil = process.env.ONBOARDING_GAS_FIL || '0.02';
   const port = Number(process.env.PORT) || 3000;
 
   if (!rpcUrl) { console.error('Error: RPC_URL required'); process.exit(1); }
@@ -576,9 +631,28 @@ async function startServer() {
 
   let createCheckoutSession;
   let stripe;
-  let fundSuccessfulPayment;
+  let provisionStorageCredit;
+  let prepareOnboarding;
+  const billingLedger = new BillingLedger();
+  if (walletBootstrapEnabled) {
+    if ((process.env.SYNAPSE_CHAIN || 'calibration') !== 'calibration') {
+      throw new Error('ENABLE_WALLET_BOOTSTRAP is restricted to calibration until production abuse controls are configured');
+    }
+    const targetBalance = ethers.parseEther(onboardingGasFil);
+    prepareOnboarding = async (userAddress) => {
+      const balance = await provider.getBalance(userAddress);
+      if (balance >= targetBalance) return;
+      const transaction = await signer.sendTransaction({
+        to: userAddress,
+        value: targetBalance - balance,
+      });
+      await transaction.wait();
+    };
+  }
   if (stripeSecretKey) {
-    if (!(filUsdPrice > 0)) throw new Error('FIL_USD_PRICE must be set when Stripe billing is enabled');
+    if (!storageTreasuryReady) {
+      throw new Error('STORAGE_TREASURY_READY=true is required before Stripe billing can accept payments');
+    }
     stripe = require('stripe')(stripeSecretKey);
     const plans = {
       starter: { name: 'Echo Starter Storage', cents: 500 },
@@ -587,9 +661,13 @@ async function startServer() {
     };
     createCheckoutSession = async ({ plan, userAddress }) => {
       const selected = plans[plan];
-      const usd = selected.cents / 100;
-      const filAmount = (usd / filUsdPrice).toFixed(8);
-      const metadata = { echoAddress: userAddress, filAmount, plan, storageUsd: usd.toFixed(2) };
+      const metadata = {
+        echoAddress: userAddress,
+        plan,
+        creditCents: String(selected.cents),
+        storageUsd: (selected.cents / 100).toFixed(2),
+        settlementModel: 'managed-reserve',
+      };
       return stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: [{
@@ -607,15 +685,10 @@ async function startServer() {
       });
     };
 
-    if (stripeWebhookSecret) {
-      fundSuccessfulPayment = ({ echoAddress, filAmount }) => fundVault({
-        rpcUrl,
-        contractAddress,
-        privateKey,
-        targetAddress: echoAddress,
-        amountInFil: filAmount,
-      });
-    }
+    // The platform treasury is pre-funded with USDFC for storage and FIL for
+    // gas. A successful provisioning reserves USD-denominated Echo credit;
+    // it does not claim that the customer's card purchase bought FIL.
+    provisionStorageCredit = async ({ paymentIntentId }) => `managed-reserve:${paymentIntentId}`;
   }
 
   const app = createApp({
@@ -629,7 +702,9 @@ async function startServer() {
     createCheckoutSession,
     stripe,
     stripeWebhookSecret,
-    fundSuccessfulPayment,
+    billingLedger,
+    provisionStorageCredit,
+    prepareOnboarding,
   });
 
   app.listen(port, () => {

@@ -5,6 +5,7 @@ const { compileAll } = require('../compile-helper');
 const { deployProxy } = require('./proxy-helper');
 const { createApp } = require('../integrations/rest-api');
 const { generateKey } = require('../lib/crypto');
+const { BillingLedger } = require('../lib/billingLedger');
 
 function makeFakeStorage() {
   const blobs = new Map();
@@ -71,7 +72,7 @@ async function signedSignup(app, signer) {
 describe('integrations/rest-api.js', function () {
   this.timeout(30000);
 
-  let contracts, provider, owner, stranger, ownerAuth, strangerAuth, app, encryptionKey, registry;
+  let contracts, provider, owner, stranger, ownerAuth, strangerAuth, app, encryptionKey, registry, billingLedger;
 
   before(async function () {
     contracts = compileAll();
@@ -90,6 +91,7 @@ describe('integrations/rest-api.js', function () {
     registry = await deployProxy(contracts.EchoMemoryRegistry, owner);
     const contractAddress = await registry.getAddress();
     const storage = makeFakeStorage();
+    billingLedger = new BillingLedger();
     app = createApp({
       rpcUrl: 'not-used',
       contractAddress,
@@ -100,6 +102,7 @@ describe('integrations/rest-api.js', function () {
       createCheckoutSession: async ({ plan, userAddress }) => ({
         url: `https://checkout.stripe.test/${plan}/${userAddress}`,
       }),
+      billingLedger,
     });
   });
 
@@ -293,6 +296,15 @@ describe('integrations/rest-api.js', function () {
         });
         expect(res.status).to.equal(200);
         expect(res.body.checkoutUrl).to.include('checkout.stripe.test/plus');
+      });
+
+      it('returns the signed-in user storage-credit status', async function () {
+        const res = await request(app, 'GET', '/v1/billing/status', null, {
+          Authorization: `Bearer ${apiKey}`,
+        });
+        expect(res.status).to.equal(200);
+        expect(res.body.creditCents).to.equal(0);
+        expect(res.body.payments).to.deep.equal([]);
       });
 
       it('rejects saving without write access granted', async function () {
