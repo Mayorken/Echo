@@ -591,7 +591,11 @@ async function startServer() {
   const contractAddress = process.env.CONTRACT_ADDRESS;
   const privateKey = process.env.PRIVATE_KEY;
   const synapsePrivateKey = process.env.SYNAPSE_PRIVATE_KEY;
-  const encryptionKeyHex = process.env.ENCRYPTION_KEY;
+  const encryptionKeyHex = (process.env.ENCRYPTION_KEY || '')
+    .trim()
+    .replace(/^ENCRYPTION_KEY\s*=\s*/i, '')
+    .replace(/^['"]|['"]$/g, '')
+    .replace(/^0x/i, '');
   const operatorApiKey = process.env.OPERATOR_API_KEY;
   const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map((v) => v.trim()).filter(Boolean);
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
