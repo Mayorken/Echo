@@ -649,10 +649,10 @@ async function startServer() {
       await transaction.wait();
     };
   }
-  if (stripeSecretKey) {
-    if (!storageTreasuryReady) {
-      throw new Error('STORAGE_TREASURY_READY=true is required before Stripe billing can accept payments');
-    }
+  if (stripeSecretKey && !storageTreasuryReady) {
+    console.warn('Warning: Stripe billing is disabled until STORAGE_TREASURY_READY=true');
+  }
+  if (stripeSecretKey && storageTreasuryReady) {
     stripe = require('stripe')(stripeSecretKey);
     const plans = {
       starter: { name: 'Echo Starter Storage', cents: 500 },
