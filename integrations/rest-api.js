@@ -597,10 +597,18 @@ async function startServer() {
     .replace(/^['"]|['"]$/g, '')
     .replace(/^0x/i, '');
   const operatorApiKey = process.env.OPERATOR_API_KEY;
-  const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map((v) => v.trim()).filter(Boolean);
+  const defaultCorsOrigins = [
+    'https://mayorken.github.io',
+    'http://127.0.0.1:4173',
+    'http://localhost:4173',
+  ];
+  const corsOrigins = (process.env.CORS_ORIGINS || defaultCorsOrigins.join(','))
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
   const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  const appUrl = process.env.APP_URL || 'http://127.0.0.1:4173';
+  const appUrl = process.env.APP_URL || 'https://mayorken.github.io/Echo/';
   const storageTreasuryReady = process.env.STORAGE_TREASURY_READY === 'true';
   const walletBootstrapEnabled = process.env.ENABLE_WALLET_BOOTSTRAP === 'true';
   const onboardingGasFil = process.env.ONBOARDING_GAS_FIL || '0.02';

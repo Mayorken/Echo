@@ -25,9 +25,9 @@ services:
       - key: OPERATOR_API_KEY
         generateValue: true
       - key: APP_URL
-        sync: false
+        value: https://mayorken.github.io/Echo/
       - key: CORS_ORIGINS
-        sync: false
+        value: https://mayorken.github.io
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
