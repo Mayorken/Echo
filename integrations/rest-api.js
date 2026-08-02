@@ -489,7 +489,12 @@ function createApp(config) {
       });
     } catch (err) {
       console.error(`POST /v1/auth/signup error at ${onboardingStage}:`, err.message);
-      res.status(500).json({ error: 'Internal server error', code: 'ONBOARDING_FAILED', stage: onboardingStage });
+      res.status(500).json({
+        error: 'Internal server error',
+        code: 'ONBOARDING_FAILED',
+        stage: onboardingStage,
+        providerCode: typeof err.code === 'string' ? err.code : 'UNKNOWN',
+      });
     }
   });
 
