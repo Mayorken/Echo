@@ -422,6 +422,7 @@ function createApp(config) {
    * read access on-chain. Body: { userAddress: "0x..." }
    */
   app.post('/v1/auth/signup', async (req, res) => {
+    let onboardingStage = 'validate_request';
     try {
       if (!serviceWalletAddress) {
         return res.status(503).json({ error: 'Hosted mode is not configured on this server' });
@@ -446,10 +447,13 @@ function createApp(config) {
       if (recovered.toLowerCase() !== userAddress.toLowerCase()) {
         return res.status(401).json({ error: 'Signature does not match userAddress' });
       }
+      onboardingStage = 'check_read_access';
       const readGranted = await client.contract.hasAccess(userAddress, serviceWalletAddress);
+      onboardingStage = 'check_write_access';
       const writeGranted = await client.contract.hasWriteAccess(userAddress, serviceWalletAddress);
       let onboardingTransactions = [];
       if ((!readGranted || !writeGranted) && prepareOnboarding) {
+        onboardingStage = 'fund_user_wallet';
         await prepareOnboarding(userAddress);
         if (!readGranted) {
           onboardingTransactions.push({
@@ -470,6 +474,7 @@ function createApp(config) {
           error: `Address ${userAddress} has not granted this service (${serviceWalletAddress}) access yet. Call grantAccess() first.`,
         });
       }
+      onboardingStage = 'issue_api_key';
       const apiKey = generateApiKey(userAddress);
       res.json({
         apiKey,
@@ -478,8 +483,8 @@ function createApp(config) {
         onboardingTransactions,
       });
     } catch (err) {
-      console.error('POST /v1/auth/signup error:', err.message);
-      res.status(500).json({ error: 'Internal server error' });
+      console.error(`POST /v1/auth/signup error at ${onboardingStage}:`, err.message);
+      res.status(500).json({ error: 'Internal server error', code: 'ONBOARDING_FAILED', stage: onboardingStage });
     }
   });
 
