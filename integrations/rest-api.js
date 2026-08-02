@@ -133,7 +133,12 @@ function createApp(config) {
   const serviceWalletAddress = signer && signer.address ? signer.address : null;
 
   app.get('/health', (req, res) => {
-    res.json({ status: 'ok', contractAddress, timestamp: new Date().toISOString() });
+    res.json({
+      status: 'ok',
+      contractAddress,
+      serviceWalletAddress,
+      timestamp: new Date().toISOString(),
+    });
   });
 
   app.use((req, res, next) => {
