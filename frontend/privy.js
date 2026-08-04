@@ -3,6 +3,20 @@ import Privy, {
   getEntropyDetailsFromUser,
   getUserEmbeddedEthereumWallet,
 } from '@privy-io/js-sdk-core';
+import { defineChain } from 'viem';
+
+const filecoinCalibration = defineChain({
+  id: 314159,
+  name: 'Filecoin Calibration',
+  nativeCurrency: { name: 'testnet Filecoin', symbol: 'tFIL', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://api.calibration.node.glif.io/rpc/v1'] },
+  },
+  blockExplorers: {
+    default: { name: 'Filfox', url: 'https://calibration.filfox.info/en' },
+  },
+  testnet: true,
+});
 
 let client;
 let user;
@@ -28,6 +42,7 @@ async function initialize() {
     appId: privyAppId,
     clientId: privyClientId,
     storage: new LocalStorage(),
+    supportedChains: [filecoinCalibration],
   });
   await client.initialize();
 

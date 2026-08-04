@@ -4,6 +4,10 @@ const esbuild = require('esbuild');
 
 const root = path.resolve(__dirname, '..');
 const entryPath = path.join(root, 'frontend', 'privy.js');
+const privyEsmPath = require.resolve('@privy-io/js-sdk-core')
+  .replace(`${path.sep}dist${path.sep}cjs${path.sep}index.js`, `${path.sep}dist${path.sep}esm${path.sep}index.mjs`);
+const viemEsmPath = require.resolve('viem')
+  .replace(`${path.sep}_cjs${path.sep}index.js`, `${path.sep}_esm${path.sep}index.js`);
 
 esbuild.build({
   absWorkingDir: root,
@@ -20,7 +24,10 @@ esbuild.build({
     name: 'workspace-package-resolution',
     setup(build) {
       build.onResolve({ filter: /^@privy-io\/js-sdk-core$/ }, () => ({
-        path: require.resolve('@privy-io/js-sdk-core'),
+        path: privyEsmPath,
+      }));
+      build.onResolve({ filter: /^viem$/ }, () => ({
+        path: viemEsmPath,
       }));
     },
   }],
