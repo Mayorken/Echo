@@ -3,7 +3,7 @@ const ganache = require('ganache');
 const { ethers } = require('ethers');
 const { compileAll } = require('../compile-helper');
 const { deployProxy } = require('./proxy-helper');
-const { createApp } = require('../integrations/rest-api');
+const { createApp, broadcastRawTransaction } = require('../integrations/rest-api');
 const { generateKey } = require('../lib/crypto');
 const { BillingLedger } = require('../lib/billingLedger');
 
@@ -57,6 +57,42 @@ function request(app, method, path, body, headers) {
     });
   });
 }
+
+describe('broadcastRawTransaction', function () {
+  it('returns the Filecoin RPC transaction hash directly', async function () {
+    const fetchImpl = async () => ({
+      ok: true,
+      json: async () => ({ jsonrpc: '2.0', id: 1, result: `0x${'ab'.repeat(32)}` }),
+    });
+    expect(await broadcastRawTransaction('https://rpc.test', '0x1234', fetchImpl))
+      .to.equal(`0x${'ab'.repeat(32)}`);
+  });
+
+  it('preserves the real Filecoin RPC error message', async function () {
+    const fetchImpl = async () => ({
+      ok: true,
+      json: async () => ({ error: { code: -32000, message: 'insufficient funds for gas' } }),
+    });
+    try {
+      await broadcastRawTransaction('https://rpc.test', '0x1234', fetchImpl);
+      expect.fail('expected the RPC request to fail');
+    } catch (err) {
+      expect(err.message).to.equal('insufficient funds for gas');
+    }
+  });
+
+  it('treats an already-mined transaction as a successful retry', async function () {
+    let calls = 0;
+    const fetchImpl = async () => ({
+      ok: true,
+      json: async () => (++calls === 1
+        ? { error: { code: -32000, message: 'nonce too low' } }
+        : { result: { status: '0x1' } }),
+    });
+    expect(await broadcastRawTransaction('https://rpc.test', '0x1234', fetchImpl))
+      .to.equal(ethers.keccak256('0x1234'));
+  });
+});
 
 async function signedSignup(app, signer) {
   const challenge = await request(app, 'POST', '/v1/auth/challenge', {

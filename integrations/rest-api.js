@@ -42,6 +42,35 @@ function parseHexKey(hex, headerName) {
   return Uint8Array.from(Buffer.from(hex, 'hex'));
 }
 
+async function broadcastRawTransaction(rpcUrl, rawTransaction, fetchImpl = fetch) {
+  const request = async (method, params) => {
+    const response = await fetchImpl(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    });
+    if (!response.ok) throw new Error(`Filecoin RPC returned HTTP ${response.status}`);
+    const payload = await response.json();
+    if (payload.error) {
+      const rpcError = new Error(payload.error.message || JSON.stringify(payload.error));
+      rpcError.code = payload.error.code;
+      throw rpcError;
+    }
+    return payload.result;
+  };
+
+  const hash = ethers.keccak256(rawTransaction);
+  try {
+    return await request('eth_sendRawTransaction', [rawTransaction]);
+  } catch (err) {
+    if (/already known|already in.*pool|nonce too low/i.test(err.message)) {
+      const receipt = await request('eth_getTransactionReceipt', [hash]);
+      if (receipt) return hash;
+    }
+    throw err;
+  }
+}
+
 function createApp(config) {
   const {
     rpcUrl,
@@ -540,7 +569,8 @@ function createApp(config) {
     } catch (err) {
       console.error('POST /v1/auth/broadcast error:', err.message);
       res.status(502).json({
-        error: err.shortMessage || err.reason || 'Filecoin network rejected the signed transaction',
+        error: err.reason || err.info?.error?.message || err.error?.message || err.message
+          || 'Filecoin network rejected the signed transaction',
       });
     }
   });
@@ -779,7 +809,7 @@ async function startServer() {
     billingLedger,
     provisionStorageCredit,
     prepareOnboarding,
-    broadcastOnboardingTransaction: (rawTransaction) => provider.broadcastTransaction(rawTransaction),
+    broadcastOnboardingTransaction: (rawTransaction) => broadcastRawTransaction(rpcUrl, rawTransaction),
   });
 
   app.listen(port, () => {
@@ -796,4 +826,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createApp };
+module.exports = { createApp, broadcastRawTransaction };
