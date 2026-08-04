@@ -57,6 +57,7 @@ function createApp(config) {
     billingLedger,
     provisionStorageCredit,
     prepareOnboarding,
+    broadcastOnboardingTransaction,
   } = config;
 
   const app = express();
@@ -498,6 +499,52 @@ function createApp(config) {
     }
   });
 
+  /**
+   * POST /v1/auth/broadcast
+   * Broadcast a user-signed onboarding permission transaction. The browser's
+   * embedded wallet remains the only signer; the API is only a reliable RPC
+   * transport for Filecoin nodes that reject browser-originated submissions.
+   */
+  app.post('/v1/auth/broadcast', async (req, res) => {
+    try {
+      if (!broadcastOnboardingTransaction || !serviceWalletAddress) {
+        return res.status(503).json({ error: 'Onboarding broadcaster is not configured' });
+      }
+      const { rawTransaction } = req.body;
+      if (typeof rawTransaction !== 'string' || !/^0x[0-9a-fA-F]+$/.test(rawTransaction)) {
+        return res.status(400).json({ error: 'Valid rawTransaction is required' });
+      }
+
+      let transaction;
+      let call;
+      try {
+        transaction = ethers.Transaction.from(rawTransaction);
+        call = client.contract.interface.parseTransaction({
+          data: transaction.data,
+          value: transaction.value,
+        });
+      } catch {
+        return res.status(400).json({ error: 'Invalid signed onboarding transaction' });
+      }
+      const allowedMethod = call && (call.name === 'grantAccess' || call.name === 'grantWriteAccess');
+      const correctContract = transaction.to
+        && transaction.to.toLowerCase() === contractAddress.toLowerCase();
+      const correctService = call && call.args[0]
+        && String(call.args[0]).toLowerCase() === serviceWalletAddress.toLowerCase();
+      if (!transaction.from || !allowedMethod || !correctContract || !correctService || transaction.value !== 0n) {
+        return res.status(400).json({ error: 'Transaction is not an Echo onboarding permission' });
+      }
+
+      const response = await broadcastOnboardingTransaction(rawTransaction);
+      res.json({ hash: typeof response === 'string' ? response : response.hash });
+    } catch (err) {
+      console.error('POST /v1/auth/broadcast error:', err.message);
+      res.status(502).json({
+        error: err.shortMessage || err.reason || 'Filecoin network rejected the signed transaction',
+      });
+    }
+  });
+
   async function requireApiKey(req, res, next) {
     const header = req.get('Authorization') || '';
     const apiKey = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -732,6 +779,7 @@ async function startServer() {
     billingLedger,
     provisionStorageCredit,
     prepareOnboarding,
+    broadcastOnboardingTransaction: (rawTransaction) => provider.broadcastTransaction(rawTransaction),
   });
 
   app.listen(port, () => {

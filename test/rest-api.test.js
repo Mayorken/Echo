@@ -103,6 +103,7 @@ describe('integrations/rest-api.js', function () {
         url: `https://checkout.stripe.test/${plan}/${userAddress}`,
       }),
       billingLedger,
+      broadcastOnboardingTransaction: (rawTransaction) => provider.broadcastTransaction(rawTransaction),
     });
   });
 
@@ -249,6 +250,38 @@ describe('integrations/rest-api.js', function () {
           signature: await ownerAuth.signMessage('not the issued challenge'),
         });
         expect(res.status).to.equal(401);
+      });
+
+      it('broadcasts only a user-signed Echo onboarding permission', async function () {
+        const network = await provider.getNetwork();
+        const feeData = await provider.getFeeData();
+        const rawTransaction = await strangerAuth.signTransaction({
+          chainId: network.chainId,
+          nonce: await provider.getTransactionCount(stranger.address),
+          gasLimit: 150000n,
+          gasPrice: feeData.gasPrice,
+          to: await registry.getAddress(),
+          data: registry.interface.encodeFunctionData('grantAccess', [owner.address]),
+          value: 0n,
+        });
+        const res = await request(app, 'POST', '/v1/auth/broadcast', { rawTransaction });
+        expect(res.status).to.equal(200);
+        expect(res.body.hash).to.match(/^0x[0-9a-f]{64}$/);
+        await provider.waitForTransaction(res.body.hash);
+        expect(await registry.hasAccess(stranger.address, owner.address)).to.equal(true);
+      });
+
+      it('rejects a signed transaction that is not an onboarding permission', async function () {
+        const rawTransaction = await strangerAuth.signTransaction({
+          chainId: (await provider.getNetwork()).chainId,
+          nonce: await provider.getTransactionCount(stranger.address),
+          gasLimit: 21000n,
+          gasPrice: (await provider.getFeeData()).gasPrice,
+          to: owner.address,
+          value: 1n,
+        });
+        const res = await request(app, 'POST', '/v1/auth/broadcast', { rawTransaction });
+        expect(res.status).to.equal(400);
       });
     });
 
