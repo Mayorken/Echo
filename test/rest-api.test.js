@@ -149,6 +149,7 @@ describe('integrations/rest-api.js', function () {
       expect(res.status).to.equal(200);
       expect(res.body.status).to.equal('ok');
       expect(res.body).to.have.property('contractAddress');
+      expect(res.body).to.include({ network: 'calibration', billingEnabled: true });
       expect(res.body).to.have.property('timestamp');
     });
   });

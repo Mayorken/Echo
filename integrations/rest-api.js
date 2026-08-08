@@ -167,6 +167,8 @@ function createApp(config) {
       status: 'ok',
       contractAddress,
       serviceWalletAddress,
+      network: process.env.SYNAPSE_CHAIN || 'calibration',
+      billingEnabled: Boolean(createCheckoutSession),
       timestamp: new Date().toISOString(),
     });
   });
