@@ -582,7 +582,10 @@ function createApp(config) {
 
   async function requireApiKey(req, res, next) {
     const header = req.get('Authorization') || '';
-    const apiKey = header.startsWith('Bearer ') ? header.slice(7) : null;
+    const credential = header.startsWith('Bearer ') ? header.slice(7) : null;
+    const separator = credential ? credential.lastIndexOf('.') : -1;
+    const apiKey = separator > 0 ? credential.slice(0, separator) : credential;
+    const embeddedKey = separator > 0 ? credential.slice(separator + 1) : '';
     const record = apiKey ? validateApiKey(apiKey) : null;
     if (!record) {
       return res.status(401).json({ error: 'Missing or invalid API key' });
@@ -597,6 +600,7 @@ function createApp(config) {
       return res.status(503).json({ error: 'Authorization service unavailable' });
     }
     req.userAddress = record.userAddress;
+    req.echoKey = /^[0-9a-fA-F]{64}$/.test(embeddedKey) ? embeddedKey : '';
     next();
   }
 
@@ -607,7 +611,7 @@ function createApp(config) {
    */
   app.get('/v1/context', requireApiKey, async (req, res) => {
     try {
-      const decryptionKey = parseHexKey(req.get('X-Echo-Key'), 'X-Echo-Key');
+      const decryptionKey = parseHexKey(req.get('X-Echo-Key') || req.echoKey, 'X-Echo-Key');
       const context = await client.loadMemory(req.userAddress, decryptionKey);
       if (context === null) {
         return res.json({ context: null, message: 'No context stored for this user' });
@@ -633,7 +637,7 @@ function createApp(config) {
       if (!context || typeof context !== 'object') {
         return res.status(400).json({ error: 'Request body must include a "context" object' });
       }
-      const encKey = parseHexKey(req.get('X-Echo-Key'), 'X-Echo-Key');
+      const encKey = parseHexKey(req.get('X-Echo-Key') || req.echoKey, 'X-Echo-Key');
       const result = await client.saveMemoryFor(req.userAddress, context, encKey);
       res.json({ success: true, cid: result.cid, integrityHash: result.integrityHash });
     } catch (err) {

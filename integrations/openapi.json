@@ -1,45 +1,42 @@
 {
-  "openapi": "3.0.0",
+  "openapi": "3.1.0",
   "info": {
-    "title": "Echo — AI Context Portability API",
-    "version": "0.1.0",
-    "description": "REST API for Echo's universal AI context portability layer. Save, load, and manage portable context that follows the user across AI tools — encrypted, stored on Filecoin, controlled by the user's smart contract."
+    "title": "Echo Context API",
+    "version": "1.0.0",
+    "description": "Read and update the signed-in user's portable AI context. Context is encrypted and access-controlled by Echo."
   },
   "servers": [
-    {
-      "url": "http://localhost:3000",
-      "description": "Local development server"
-    }
+    { "url": "https://echo-api-zivt.onrender.com", "description": "Echo production API" }
   ],
+  "security": [{ "bearerAuth": [] }],
   "paths": {
-    "/health": {
+    "/v1/context": {
       "get": {
-        "operationId": "healthCheck",
-        "summary": "Check API health",
+        "operationId": "getEchoContext",
+        "summary": "Load the user's Echo context",
+        "description": "Use this when background about the user's preferences, projects, or previous decisions would improve the answer.",
         "responses": {
           "200": {
-            "description": "API is running",
+            "description": "The user's saved context",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": { "type": "string" },
-                    "contractAddress": { "type": "string" },
-                    "timestamp": { "type": "string" }
+                    "context": { "type": ["object", "null"], "additionalProperties": true },
+                    "cid": { "type": "string" }
                   }
                 }
               }
             }
-          }
+          },
+          "401": { "description": "Missing or invalid Echo credentials" }
         }
-      }
-    },
-    "/context/save": {
+      },
       "post": {
-        "operationId": "saveContext",
-        "summary": "Save or update the user's AI context",
-        "description": "Encrypts the context client-side, uploads to Filecoin via the Synapse SDK, and records the CID + integrity hash on-chain.",
+        "operationId": "saveEchoContext",
+        "summary": "Save the user's Echo context",
+        "description": "Call only when the user explicitly asks to remember or update information.",
         "requestBody": {
           "required": true,
           "content": {
@@ -48,316 +45,7 @@
                 "type": "object",
                 "required": ["context"],
                 "properties": {
-                  "context": {
-                    "type": "object",
-                    "description": "The context to save. Any JSON-serializable object: project info, preferences, architecture decisions, etc."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Context saved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean" },
-                    "cid": { "type": "string", "description": "IPFS/Filecoin content identifier" },
-                    "integrityHash": { "type": "string", "description": "Keccak256 hash of the plaintext" }
-                  }
-                }
-              }
-            }
-          },
-          "400": { "description": "Invalid request body" },
-          "500": { "description": "Server error" }
-        }
-      }
-    },
-    "/context/load/{userAddress}": {
-      "get": {
-        "operationId": "loadContext",
-        "summary": "Load a user's portable AI context",
-        "description": "Fetches the encrypted context from Filecoin, decrypts it, and verifies integrity against the on-chain hash. Requires granted access.",
-        "parameters": [
-          {
-            "name": "userAddress",
-            "in": "path",
-            "required": true,
-            "schema": { "type": "string" },
-            "description": "Ethereum address of the user whose context to load"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Context loaded",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "context": { "type": "object", "nullable": true },
-                    "message": { "type": "string" }
-                  }
-                }
-              }
-            }
-          },
-          "400": { "description": "Invalid address" },
-          "500": { "description": "Access denied or server error" }
-        }
-      }
-    },
-    "/access/grant": {
-      "post": {
-        "operationId": "grantAccess",
-        "summary": "Grant an AI tool read access to the user's context",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["appAddress"],
-                "properties": {
-                  "appAddress": {
-                    "type": "string",
-                    "description": "Ethereum address of the AI tool to grant access to"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Access granted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean" },
-                    "granted": { "type": "string" }
-                  }
-                }
-              }
-            }
-          },
-          "400": { "description": "Invalid address" },
-          "500": { "description": "Server error" }
-        }
-      }
-    },
-    "/access/revoke": {
-      "post": {
-        "operationId": "revokeAccess",
-        "summary": "Revoke an AI tool's access to the user's context",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["appAddress"],
-                "properties": {
-                  "appAddress": {
-                    "type": "string",
-                    "description": "Ethereum address of the AI tool to revoke"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Access revoked",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean" },
-                    "revoked": { "type": "string" }
-                  }
-                }
-              }
-            }
-          },
-          "400": { "description": "Invalid address" },
-          "500": { "description": "Server error" }
-        }
-      }
-    },
-    "/access/list/{userAddress}": {
-      "get": {
-        "operationId": "listAccess",
-        "summary": "List all AI tools with access status",
-        "parameters": [
-          {
-            "name": "userAddress",
-            "in": "path",
-            "required": true,
-            "schema": { "type": "string" },
-            "description": "Ethereum address of the user"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Access list",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "apps": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "address": { "type": "string" },
-                          "active": { "type": "boolean" }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/renewal/fund": {
-      "post": {
-        "operationId": "fundRenewal",
-        "summary": "Fund perpetual-storage renewal endowment",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["amountInFil"],
-                "properties": {
-                  "amountInFil": {
-                    "type": "string",
-                    "description": "Amount of FIL to fund (e.g. '0.1')"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Renewal funded",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean" },
-                    "funded": { "type": "string" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/key/generate": {
-      "post": {
-        "operationId": "generateKey",
-        "summary": "Generate a new 256-bit encryption key",
-        "responses": {
-          "200": {
-            "description": "Key generated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "key": { "type": "string", "description": "Hex-encoded 32-byte key" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-
-    "/vault/create": {
-      "post": {
-        "operationId": "createVault",
-        "summary": "Create a new shared team vault",
-        "description": "Creates an on-chain team vault with the caller as owner. Switch between personal context (/context/*) and team context (/vault/*) by changing which routes you call. The vaultName is hashed on-chain to a bytes32 ID — the same name always resolves to the same vault.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["vaultName"],
-                "properties": {
-                  "vaultName": {
-                    "type": "string",
-                    "description": "Human-readable vault name, e.g. 'team-alpha'. Must be consistent across all team members."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Vault created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean" },
-                    "vault": { "type": "string" }
-                  }
-                }
-              }
-            }
-          },
-          "400": { "description": "Invalid request" },
-          "500": { "description": "Server error (vault may already exist)" }
-        }
-      }
-    },
-
-    "/vault/save": {
-      "post": {
-        "operationId": "saveVaultContext",
-        "summary": "Save shared AI context to a team vault",
-        "description": "Encrypts context client-side, uploads to Filecoin, and records the pointer on-chain. Any current vault member can write. The Keeper sees only ciphertext.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["vaultName", "context"],
-                "properties": {
-                  "vaultName": {
-                    "type": "string",
-                    "description": "Name of the team vault to write to"
-                  },
-                  "context": {
-                    "type": "object",
-                    "description": "The shared context object to save (any JSON-serializable data)"
-                  }
+                  "context": { "type": "object", "additionalProperties": true }
                 }
               }
             }
@@ -371,148 +59,55 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean" },
-                    "vault": { "type": "string" },
                     "cid": { "type": "string" },
-                    "integrityHash": { "type": "string" }
+                    "hash": { "type": "string" }
                   }
                 }
               }
             }
           },
-          "400": { "description": "Invalid request" },
-          "500": { "description": "Server error or not a vault member" }
+          "401": { "description": "Missing or invalid Echo credentials" }
         }
       }
     },
-
-    "/vault/load/{vaultName}": {
+    "/v1/access": {
       "get": {
-        "operationId": "loadVaultContext",
-        "summary": "Load shared AI context from a team vault",
-        "description": "Fetches encrypted context from Filecoin, decrypts it, and verifies integrity. Caller must be a current vault member.",
-        "parameters": [
-          {
-            "name": "vaultName",
-            "in": "path",
-            "required": true,
-            "schema": { "type": "string" },
-            "description": "Name of the team vault to read from"
-          }
-        ],
+        "operationId": "listEchoAccess",
+        "summary": "List applications approved to use Echo context",
+        "security": [{ "bearerAuth": [] }],
         "responses": {
           "200": {
-            "description": "Context loaded",
+            "description": "Current application permissions",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "context": { "type": "object", "nullable": true },
-                    "message": { "type": "string" }
+                    "apps": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "app": { "type": "string" },
+                          "active": { "type": "boolean" }
+                        }
+                      }
+                    }
                   }
                 }
               }
             }
-          },
-          "500": { "description": "Access denied or server error" }
+          }
         }
       }
-    },
-
-    "/vault/grant": {
-      "post": {
-        "operationId": "grantVaultAccess",
-        "summary": "Grant a teammate access to a team vault",
-        "description": "Only the vault owner can grant access. After granting, the new member can read and write the vault context.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["vaultName", "memberAddress"],
-                "properties": {
-                  "vaultName": {
-                    "type": "string",
-                    "description": "Name of the team vault"
-                  },
-                  "memberAddress": {
-                    "type": "string",
-                    "description": "Ethereum address of the teammate to add"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Access granted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean" },
-                    "vault": { "type": "string" },
-                    "granted": { "type": "string" }
-                  }
-                }
-              }
-            }
-          },
-          "400": { "description": "Invalid address" },
-          "500": { "description": "Server error or caller is not vault owner" }
-        }
-      }
-    },
-
-    "/vault/revoke": {
-      "post": {
-        "operationId": "revokeVaultAccess",
-        "summary": "Revoke a member's access to a team vault",
-        "description": "Only the vault owner can revoke access. The owner cannot revoke themselves.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["vaultName", "memberAddress"],
-                "properties": {
-                  "vaultName": {
-                    "type": "string",
-                    "description": "Name of the team vault"
-                  },
-                  "memberAddress": {
-                    "type": "string",
-                    "description": "Ethereum address of the member to remove"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Access revoked",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean" },
-                    "vault": { "type": "string" },
-                    "revoked": { "type": "string" }
-                  }
-                }
-              }
-            }
-          },
-          "400": { "description": "Invalid address" },
-          "500": { "description": "Server error or caller is not vault owner" }
-        }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Echo account API token"
       }
     }
   }
