@@ -1,7 +1,7 @@
 'use strict';
 
 const { expect } = require('chai');
-const { mergeContext, containsSensitiveFields } = require('../lib/remoteMcp');
+const { mergeContext, containsSensitiveFields, isStorageFundingError } = require('../lib/remoteMcp');
 
 describe('remote MCP automatic memory', function () {
   it('merges nested facts without erasing existing context', function () {
@@ -23,5 +23,10 @@ describe('remote MCP automatic memory', function () {
     expect(containsSensitiveFields({ projects: ['Echo'] })).to.equal(false);
     expect(containsSensitiveFields({ account: { privateKey: '0xabc' } })).to.equal(true);
     expect(containsSensitiveFields({ api_token: 'secret' })).to.equal(true);
+  });
+
+  it('recognizes Synapse platform-reserve funding failures', function () {
+    expect(isStorageFundingError(new Error('PaymentsService fundSync failed: Insufficient balance'))).to.equal(true);
+    expect(isStorageFundingError(new Error('ordinary network timeout'))).to.equal(false);
   });
 });

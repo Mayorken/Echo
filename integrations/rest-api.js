@@ -186,6 +186,7 @@ function createApp(config) {
       status: 'ok',
       contractAddress,
       serviceWalletAddress,
+      storageWalletAddress: storage && storage.accountAddress || null,
       network: process.env.SYNAPSE_CHAIN || 'calibration',
       billingEnabled: Boolean(createCheckoutSession),
       timestamp: new Date().toISOString(),
@@ -826,6 +827,9 @@ function createApp(config) {
       res.json({ success: true, cid: result.cid, integrityHash: result.integrityHash });
     } catch (err) {
       console.error('POST /v1/context error:', err.message);
+      if (/(PaymentsService|fundSync|insufficient balance|failed to execute fund operation)/i.test(err.message)) {
+        return res.status(503).json({ error: 'Echo storage is temporarily unavailable. You were not charged; the platform storage reserve needs replenishment.' });
+      }
       const status = /X-Echo-Key header/.test(err.message) ? 400 : 500;
       res.status(status).json({ error: status === 400 ? err.message : 'Internal server error' });
     }
