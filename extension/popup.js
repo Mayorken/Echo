@@ -16,6 +16,22 @@ chrome.storage.onChanged.addListener((changes) => {
   chrome.storage.local.get(defaults).then(renderStatus);
 });
 
+$('#importConfig').onclick = () => {
+  try {
+    const config = JSON.parse($('#connectionConfig').value.trim());
+    const token = String(config.authorization || '').replace(/^Bearer\s+/i, '');
+    const recoveryKey = config['x-echo-key'] || config.recoveryKey || '';
+    const apiUrl = config.echo_api_url || config.apiUrl || defaults.apiUrl;
+    if (!token || !/^[0-9a-fA-F]{64}$/.test(recoveryKey)) throw new Error('Invalid configuration');
+    $('#apiUrl').value = apiUrl;
+    $('#apiToken').value = token;
+    $('#recoveryKey').value = recoveryKey;
+    renderStatus({ lastStatus: 'Connection imported — save to verify', lastSyncAt: '' });
+  } catch {
+    renderStatus({ lastStatus: 'Paste the full Developer API JSON', lastSyncAt: '' });
+  }
+};
+
 $('#save').onclick = async () => {
   const values = {
     apiUrl: $('#apiUrl').value.trim().replace(/\/$/, ''),

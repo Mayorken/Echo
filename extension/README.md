@@ -7,9 +7,10 @@ Chrome Manifest V3 extension for syncing Claude and ChatGPT conversations to Ech
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Select **Load unpacked** and choose this `extension` folder.
-4. Open the extension popup and enter the Echo account token and recovery key from Echo's Developer API connection panel.
-5. Start with **Manual / review first**. Use the **Save to Echo** button inside a conversation.
-6. When satisfied, choose **Automatic every 30 minutes**.
+4. In Echo, open **Connected apps → Developer API** and copy the generated JSON configuration.
+5. Paste it into **Quick connect** in the extension and choose **Import Echo connection**.
+6. Start with **Manual / review first**. Use the **Save to Echo** button inside a conversation.
+7. When satisfied, choose **Automatic every 30 minutes**.
 
 ## Privacy behavior
 
