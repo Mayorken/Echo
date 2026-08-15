@@ -565,6 +565,9 @@ function createApp(config) {
       if (!transaction.from || !allowedMethod || !correctContract || !correctService || transaction.value !== 0n) {
         return res.status(400).json({ error: 'Transaction is not an Echo onboarding permission' });
       }
+      if (transaction.gasLimit <= 0n) {
+        return res.status(400).json({ error: 'Onboarding transaction requires a positive gas limit' });
+      }
 
       const response = await broadcastOnboardingTransaction(rawTransaction);
       res.json({ hash: typeof response === 'string' ? response : response.hash });

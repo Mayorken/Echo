@@ -320,6 +320,21 @@ describe('integrations/rest-api.js', function () {
         const res = await request(app, 'POST', '/v1/auth/broadcast', { rawTransaction });
         expect(res.status).to.equal(400);
       });
+
+      it('rejects an onboarding permission with a zero gas limit', async function () {
+        const rawTransaction = await strangerAuth.signTransaction({
+          chainId: (await provider.getNetwork()).chainId,
+          nonce: await provider.getTransactionCount(stranger.address),
+          gasLimit: 0n,
+          gasPrice: (await provider.getFeeData()).gasPrice,
+          to: await registry.getAddress(),
+          data: registry.interface.encodeFunctionData('grantAccess', [owner.address]),
+          value: 0n,
+        });
+        const res = await request(app, 'POST', '/v1/auth/broadcast', { rawTransaction });
+        expect(res.status).to.equal(400);
+        expect(res.body.error).to.include('positive gas limit');
+      });
     });
 
     describe('GET /v1/context and POST /v1/context', function () {
