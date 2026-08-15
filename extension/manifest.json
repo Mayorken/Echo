@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Echo Context Capture",
+  "version": "0.1.0",
+  "description": "Privately sync useful context from Claude and ChatGPT to Echo.",
+  "permissions": ["storage", "alarms", "tabs"],
+  "host_permissions": [
+    "https://claude.ai/*",
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://echo-api-zivt.onrender.com/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_title": "Echo Context Capture",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*", "https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "js": ["shared.js", "content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
