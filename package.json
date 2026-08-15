@@ -19,6 +19,7 @@
   "license": "MIT",
   "dependencies": {
     "@filoz/synapse-sdk": "^1.0.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@privy-io/js-sdk-core": "^0.68.4",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
@@ -30,12 +31,12 @@
     "viem": "^2.54.2"
   },
   "devDependencies": {
+    "@openzeppelin/contracts": "^5.2.0",
+    "@openzeppelin/contracts-upgradeable": "^5.2.0",
     "chai": "^4.5.0",
     "esbuild": "^0.28.1",
     "ganache": "^7.9.2",
     "mocha": "^11.7.6",
-    "@openzeppelin/contracts": "^5.2.0",
-    "@openzeppelin/contracts-upgradeable": "^5.2.0",
     "solc": "^0.8.24"
   }
 }

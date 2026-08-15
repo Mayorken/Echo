@@ -28,6 +28,8 @@ const { ethers } = require('ethers');
 const { EchoClient, generateEncryptionKey } = require('../echo-sdk');
 const { createSynapseStorage } = require('../lib/storage');
 const { BillingLedger } = require('../lib/billingLedger');
+const { createMcpAuth, verifyPkce } = require('../lib/mcpAuth');
+const { handleRemoteMcp } = require('../lib/remoteMcp');
 const {
   generateApiKey,
   validateApiKey,
@@ -87,6 +89,7 @@ function createApp(config) {
     provisionStorageCredit,
     prepareOnboarding,
     broadcastOnboardingTransaction,
+    appUrl = 'https://mayorken.github.io/Echo/',
   } = config;
 
   const app = express();
@@ -156,7 +159,9 @@ function createApp(config) {
     return res.json({ received: true });
   });
 
+  app.set('trust proxy', 1);
   app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: false }));
   app.use(rateLimit({ windowMs: 60000, max: 60, standardHeaders: true, legacyHeaders: false }));
 
   const client = new EchoClient(rpcUrl, contractAddress, signer, storage);
@@ -174,7 +179,12 @@ function createApp(config) {
   });
 
   app.use((req, res, next) => {
-    if (req.path.startsWith('/v1/')) return next();
+    const publicConnectorPath = req.path === '/mcp'
+      || req.path === '/authorize'
+      || req.path === '/token'
+      || req.path === '/register'
+      || req.path.startsWith('/.well-known/');
+    if (req.path.startsWith('/v1/') || publicConnectorPath) return next();
     if (!operatorApiKey) {
       return res.status(503).json({ error: 'Self-hosted operator routes are disabled' });
     }
@@ -604,6 +614,158 @@ function createApp(config) {
     next();
   }
 
+  const mcpAuth = createMcpAuth(encryptionKey);
+  const mcpUrl = (req) => process.env.MCP_PUBLIC_URL || `${req.protocol}://${req.get('host')}/mcp`;
+  const authBase = (req) => mcpUrl(req).replace(/\/mcp$/, '');
+
+  function oauthMetadata(req) {
+    const base = authBase(req);
+    return {
+      issuer: base,
+      authorization_endpoint: `${base}/authorize`,
+      token_endpoint: `${base}/token`,
+      registration_endpoint: `${base}/register`,
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code'],
+      code_challenge_methods_supported: ['S256'],
+      token_endpoint_auth_methods_supported: ['none'],
+      scopes_supported: ['echo:context:read', 'echo:context:write'],
+    };
+  }
+
+  app.get('/.well-known/oauth-authorization-server', (req, res) => res.json(oauthMetadata(req)));
+  app.get('/.well-known/oauth-protected-resource', (req, res) => res.json({
+    resource: mcpUrl(req),
+    authorization_servers: [authBase(req)],
+    scopes_supported: ['echo:context:read', 'echo:context:write'],
+  }));
+  app.get('/.well-known/oauth-protected-resource/mcp', (req, res) => res.json({
+    resource: mcpUrl(req),
+    authorization_servers: [authBase(req)],
+    scopes_supported: ['echo:context:read', 'echo:context:write'],
+  }));
+
+  app.post('/register', (req, res) => {
+    const redirectUris = req.body && req.body.redirect_uris;
+    if (!Array.isArray(redirectUris) || redirectUris.length === 0
+      || redirectUris.some((uri) => !/^https:\/\//.test(uri) && !/^http:\/\/(localhost|127\.0\.0\.1)(:|\/)/.test(uri))) {
+      return res.status(400).json({ error: 'invalid_redirect_uri' });
+    }
+    const clientId = mcpAuth.seal({
+      type: 'client',
+      redirectUris,
+      clientName: req.body.client_name || 'AI application',
+    }, 365 * 24 * 60 * 60 * 1000);
+    return res.status(201).json({
+      client_id: clientId,
+      client_name: req.body.client_name || 'AI application',
+      redirect_uris: redirectUris,
+      grant_types: ['authorization_code'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+    });
+  });
+
+  app.get('/authorize', (req, res) => {
+    const clientRecord = mcpAuth.open(req.query.client_id, 'client');
+    const redirectUri = req.query.redirect_uri;
+    if (!clientRecord || !clientRecord.redirectUris.includes(redirectUri)) {
+      return res.status(400).send('Invalid Echo connector client or redirect address.');
+    }
+    if (req.query.response_type !== 'code' || req.query.code_challenge_method !== 'S256'
+      || !req.query.code_challenge || !req.query.resource) {
+      return res.status(400).send('This connector must use authorization code, PKCE S256, and an MCP resource.');
+    }
+    const requestToken = mcpAuth.seal({
+      type: 'approval',
+      clientId: req.query.client_id,
+      clientName: clientRecord.clientName,
+      redirectUri,
+      state: req.query.state || '',
+      scope: req.query.scope || 'echo:context:read echo:context:write',
+      resource: req.query.resource,
+      codeChallenge: req.query.code_challenge,
+    }, 10 * 60 * 1000);
+    const destination = new URL(appUrl);
+    destination.searchParams.set('oauth_request', requestToken);
+    return res.redirect(destination.toString());
+  });
+
+  app.post('/v1/oauth/approve', requireApiKey, (req, res) => {
+    const approval = mcpAuth.open(req.body && req.body.request, 'approval');
+    const recoveryKey = req.body && req.body.recoveryKey;
+    if (!approval || !/^[0-9a-fA-F]{64}$/.test(recoveryKey || '')) {
+      return res.status(400).json({ error: 'Invalid or expired connector approval' });
+    }
+    const code = mcpAuth.seal({
+      type: 'code',
+      userAddress: req.userAddress,
+      recoveryKey,
+      clientId: approval.clientId,
+      redirectUri: approval.redirectUri,
+      resource: approval.resource,
+      scope: approval.scope,
+      codeChallenge: approval.codeChallenge,
+    }, 5 * 60 * 1000);
+    const callback = new URL(approval.redirectUri);
+    callback.searchParams.set('code', code);
+    if (approval.state) callback.searchParams.set('state', approval.state);
+    return res.json({ redirectTo: callback.toString() });
+  });
+
+  app.post('/token', (req, res) => {
+    const code = mcpAuth.open(req.body && req.body.code, 'code');
+    if (!code || req.body.grant_type !== 'authorization_code'
+      || req.body.client_id !== code.clientId || req.body.redirect_uri !== code.redirectUri
+      || !verifyPkce(req.body.code_verifier, code.codeChallenge)) {
+      return res.status(400).json({ error: 'invalid_grant' });
+    }
+    const accessToken = mcpAuth.seal({
+      type: 'access',
+      userAddress: code.userAddress,
+      recoveryKey: code.recoveryKey,
+      resource: code.resource,
+      scope: code.scope,
+    }, 7 * 24 * 60 * 60 * 1000);
+    return res.json({
+      access_token: accessToken,
+      token_type: 'Bearer',
+      expires_in: 7 * 24 * 60 * 60,
+      scope: code.scope,
+    });
+  });
+
+  app.all('/mcp', async (req, res) => {
+    const origin = req.get('Origin');
+    if (origin && !/^https:\/\/(claude\.ai|chatgpt\.com|chat\.openai\.com)$/.test(origin)
+      && !corsOrigins.includes(origin)) {
+      return res.status(403).json({ error: 'Untrusted MCP origin' });
+    }
+    const header = req.get('Authorization') || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    const access = mcpAuth.open(token, 'access');
+    if (!access || access.resource !== mcpUrl(req)) {
+      res.set('WWW-Authenticate', `Bearer resource_metadata="${authBase(req)}/.well-known/oauth-protected-resource"`);
+      return res.status(401).json({ error: 'MCP authorization required' });
+    }
+    if (req.method !== 'POST') return res.status(405).end();
+    try {
+      const stillGranted = await client.contract.hasAccess(access.userAddress, serviceWalletAddress);
+      if (!stillGranted) return res.status(403).json({ error: 'Echo access has been revoked' });
+      return await handleRemoteMcp(req, res, {
+        client,
+        userAddress: access.userAddress,
+        recoveryKey: access.recoveryKey,
+      });
+    } catch (err) {
+      console.error('Remote MCP error:', err.message);
+      if (!res.headersSent) return res.status(500).json({
+        jsonrpc: '2.0', id: null, error: { code: -32603, message: 'Echo connector failed' },
+      });
+      return undefined;
+    }
+  });
+
   /**
    * GET /v1/context
    * Load and decrypt the signed-in user's context.
@@ -819,6 +981,7 @@ async function startServer() {
     provisionStorageCredit,
     prepareOnboarding,
     broadcastOnboardingTransaction: (rawTransaction) => broadcastRawTransaction(rpcUrl, rawTransaction),
+    appUrl,
   });
 
   app.listen(port, () => {
