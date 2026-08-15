@@ -673,8 +673,8 @@ function createApp(config) {
       return res.status(400).send('Invalid Echo connector client or redirect address.');
     }
     if (req.query.response_type !== 'code' || req.query.code_challenge_method !== 'S256'
-      || !req.query.code_challenge || !req.query.resource) {
-      return res.status(400).send('This connector must use authorization code, PKCE S256, and an MCP resource.');
+      || !req.query.code_challenge) {
+      return res.status(400).send('This connector must use authorization code and PKCE S256.');
     }
     const requestToken = mcpAuth.seal({
       type: 'approval',
@@ -683,7 +683,11 @@ function createApp(config) {
       redirectUri,
       state: req.query.state || '',
       scope: req.query.scope || 'echo:context:read echo:context:write',
-      resource: req.query.resource,
+      // Some MCP clients send the authorization-server origin as the resource
+      // even when protected-resource discovery advertises the full /mcp URL.
+      // Always issue the token for Echo's canonical MCP endpoint so the
+      // subsequent initialize/tools-list exchange has a stable audience.
+      resource: mcpUrl(req),
       codeChallenge: req.query.code_challenge,
     }, 10 * 60 * 1000);
     const destination = new URL(appUrl);
