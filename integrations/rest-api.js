@@ -166,6 +166,20 @@ function createApp(config) {
 
   const client = new EchoClient(rpcUrl, contractAddress, signer, storage);
   const serviceWalletAddress = signer && signer.address ? signer.address : null;
+  const connectorActivity = new Map();
+  function recordConnector(userAddress, clientName, action) {
+    const userKey = userAddress.toLowerCase();
+    const current = connectorActivity.get(userKey) || {};
+    const connectorKey = String(clientName || 'AI application').toLowerCase();
+    const previous = current[connectorKey] || {};
+    current[connectorKey] = {
+      name: clientName || previous.name || 'AI application',
+      connectedAt: previous.connectedAt || new Date().toISOString(),
+      lastUsedAt: action === 'connected' ? previous.lastUsedAt || null : new Date().toISOString(),
+      lastAction: action,
+    };
+    connectorActivity.set(userKey, current);
+  }
 
   app.get('/health', (req, res) => {
     res.json({
@@ -705,12 +719,14 @@ function createApp(config) {
       type: 'code',
       userAddress: req.userAddress,
       recoveryKey,
+      clientName: approval.clientName,
       clientId: approval.clientId,
       redirectUri: approval.redirectUri,
       resource: approval.resource,
       scope: approval.scope,
       codeChallenge: approval.codeChallenge,
     }, 5 * 60 * 1000);
+    recordConnector(req.userAddress, approval.clientName, 'connected');
     const callback = new URL(approval.redirectUri);
     callback.searchParams.set('code', code);
     if (approval.state) callback.searchParams.set('state', approval.state);
@@ -728,6 +744,7 @@ function createApp(config) {
       type: 'access',
       userAddress: code.userAddress,
       recoveryKey: code.recoveryKey,
+      clientName: code.clientName,
       resource: code.resource,
       scope: code.scope,
     }, 7 * 24 * 60 * 60 * 1000);
@@ -760,6 +777,7 @@ function createApp(config) {
         client,
         userAddress: access.userAddress,
         recoveryKey: access.recoveryKey,
+        onActivity: (action) => recordConnector(access.userAddress, access.clientName, action),
       });
     } catch (err) {
       console.error('Remote MCP error:', err.message);
@@ -822,6 +840,12 @@ function createApp(config) {
       console.error('GET /v1/access error:', err.message);
       res.status(500).json({ error: 'Internal server error' });
     }
+  });
+
+  app.get('/v1/connectors/status', requireApiKey, (req, res) => {
+    const connectors = Object.values(connectorActivity.get(req.userAddress.toLowerCase()) || {})
+      .sort((a, b) => Date.parse(b.lastUsedAt || b.connectedAt) - Date.parse(a.lastUsedAt || a.connectedAt));
+    res.json({ connectors });
   });
 
   /** Create a Stripe Checkout session for a USD-denominated storage plan. */
